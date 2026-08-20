@@ -60,8 +60,9 @@ export async function resolveAssetUrl(asset: {
   file_key?: string | null;
   params?: unknown;
 }): Promise<string | null> {
-  const params = asset.params as { url?: string } | null;
+  const params = asset.params as { url?: string; dataBase64?: string } | null;
   if (params?.url) return params.url;
+  if (params?.dataBase64) return `data:audio/mpeg;base64,${params.dataBase64}`;
   if (!asset.file_key) return null;
   if (process.env.R2_PUBLIC_URL) return r2PublicUrl(asset.file_key);
   try {

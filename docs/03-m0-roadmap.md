@@ -145,13 +145,15 @@ novel-cinema/
 
 ### T8 · 配音 + ASR（1.5 天）
 
-- [ ] `providers/tts.ts`：`synthesize(text, voiceProfile, {emotion,pace})`
-- [ ] `providers/asr.ts`：Whisper 兼容接口，返回文本
-- [ ] `node: voice`：逐 beat 合成 → voice_takes；旁白/角色 voice_id 分别锁定
-- [ ] `node: asr_check`：字符错误率阈值 8%，红项 + 自动重试 1 次
-- [ ] 签核 E 页面：逐句播放/重录/换声线，批准后 takes 锁定
+- [x] `providers/tts.ts`：火山引擎豆包语音合成 V3 SSE 适配器（X-Api-Key 鉴权、SSE base64 音频块拼接、语速/音调/音量/码率参数；对照官方 skill 实现）
+- [x] `providers/asr.ts`：Whisper 兼容 `/audio/transcriptions` + 字符级 LCS 相似度；未配置 ASR 时跳过回读
+- [x] `nodes/voice.ts`：配音表自动建立（旁白 + 每角色 voice_id 锁定，无多音色配置时用音调偏移区分）；逐句合成（情绪+pace → speech_rate/pitch）；音频资产落 R2（未配置时 base64 兜底）；ASR <0.85 标红；单句重录；签核 E
+- [x] API：`GET .../voice`、`POST .../voice/generate|approve`、`POST .../voice/[takeId]/redo`
+- [x] 配音页面（`/books/[bookId]/voice`）：逐句播放/ASR 分数/红项提示/单句重录/批准全部
+- [x] 单元测试：SSE 解析 + 业务错误、charSimilarity（5 例）
+- [ ] 真实 TTS 联调：填入 TTS_API_KEY（+ 可选 ASR_*）后合成一章并试听
 
-**DoD**：3 分钟脚本全部合成；两个角色音色可区分；红项句子重录后通过。
+**DoD**：3 分钟脚本全部合成；两个角色音色可区分；红项句子重录后通过。（当前：代码与 mock 测试完成，待真实 TTS key）
 
 ### T9 · 本地渲染（1.5 天）
 

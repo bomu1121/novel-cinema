@@ -91,6 +91,12 @@ export default function BookDetailPage() {
               >
                 分镜时间轴 / 签核 D →
               </Link>
+              <Link
+                href={`/books/${bookId}/voice`}
+                className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:border-zinc-900"
+              >
+                多角色配音 / 签核 E →
+              </Link>
             </div>
           </div>
           <p className="mt-1 text-sm text-zinc-500">

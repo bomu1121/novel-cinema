@@ -33,8 +33,14 @@ const envSchema = z.object({
   IMAGE_SIZE: z.string().optional(),
   TTS_PROVIDER: z.string().optional(),
   TTS_API_KEY: z.string().optional(),
+  TTS_API_BASE: z.string().optional(),
+  TTS_RESOURCE_ID: z.string().optional(),
+  TTS_NARRATOR_SPEAKER: z.string().optional(),
+  TTS_CHARACTER_SPEAKERS: z.string().optional(),
   ASR_PROVIDER: z.string().optional(),
   ASR_API_KEY: z.string().optional(),
+  ASR_BASE_URL: z.string().optional(),
+  ASR_MODEL: z.string().optional(),
   RENDER_ENDPOINT: z.string().optional(),
 });
 
