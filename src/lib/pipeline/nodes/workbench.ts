@@ -53,10 +53,24 @@ export async function getWorkbench(bookId: string) {
     beats = (beatRows ?? []) as any[];
     const beatIds = beats.map((b: { id: string }) => b.id);
     if (beatIds.length > 0) {
-      const [takeRes] = await Promise.all([
-        s.from("voice_takes").select("id, beat_id, voice_profile_id, status, asr_confidence, error, duration_ms").in("beat_id", beatIds),
-      ]);
-      voiceTakes = takeRes.data ?? [];
+      const { data: takeRows } = await s
+        .from("voice_takes")
+        .select("id, beat_id, voice_profile_id, status, asr_confidence, error, duration_ms, audio_asset_id")
+        .in("beat_id", beatIds);
+      voiceTakes = await Promise.all(
+        ((takeRows ?? []) as any[]).map(async (t) => {
+          let url: string | null = null;
+          if (t.audio_asset_id) {
+            const { data: asset } = await s
+              .from("assets")
+              .select("id, file_key, params")
+              .eq("id", t.audio_asset_id)
+              .single();
+            if (asset) url = await resolveAssetUrl(asset);
+          }
+          return { ...t, url };
+        }),
+      );
       const shotRows = await s.from("shots").select("id").in("beat_id", beatIds);
       const shotIds = (shotRows.data ?? []).map((r: { id: string }) => r.id);
       const [shotRes, layerRes] = await Promise.all([
