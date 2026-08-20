@@ -79,6 +79,12 @@ export default function BookDetailPage() {
               >
                 改编脚本 / 签核 B →
               </Link>
+              <Link
+                href={`/books/${bookId}/assets`}
+                className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:border-zinc-900"
+              >
+                资产库 / 签核 C →
+              </Link>
             </div>
           </div>
           <p className="mt-1 text-sm text-zinc-500">

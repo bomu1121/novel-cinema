@@ -122,22 +122,15 @@ novel-cinema/
 
 ### T6 · 图像适配器 + 资产库（1.5 天）
 
-- [ ] `providers/image.ts` 接口：
+- [x] `providers/image.ts`：`ImageProvider` 接口 + Seedream/火山方舟适配器（T2I/I2I 模型切换、watermark 参数降级重试、url 候选解析）
+- [x] `prompts/image.ts`：角色设定图 / 表情变体（同人同装约束）/ 背景的确定性 prompt 模板 + 通用负面词
+- [x] `nodes/assets.ts`：A10 资产生成清单（scene_key 跨章去重、phase1=设定图+背景 / phase2=表情变体、无参考图时 blocked）；A20/A30 候选生成（下载→R2 优先，R2 未配置保留 provider 直链）；签核 C（角色参考图回写 characters.ref_asset_id 并淘汰同角色其他候选）
+- [x] API：`GET/POST .../assets`、`POST .../assets/generate`、`POST .../assets/[assetId]/approve`
+- [x] 资产库页面（`/books/[bookId]/assets`）：分组画廊、点选批准、两阶段生成按钮
+- [x] 单元测试：T2I/I2I 模型选择、参考图传递、watermark 拒绝自动降级（3 例）
+- [ ] 真实图像联调：填入 IMAGE_API_KEY 后跑 phase1/phase2，核对角色一致性
 
-```ts
-interface ImageProvider {
-  generateRefCharacter(spec): Promise<ImageResult[]>;   // 角色设定图
-  generateVariant(spec): Promise<ImageResult[]>;        // 表情/姿势（带 ref）
-  generateBackground(spec): Promise<ImageResult[]>;
-}
-```
-
-- [ ] 实现一个 provider（M0 任选：即梦/Seedream API，或 Replicate/FAL 跑 Flux+IP-Adapter；决定后写清理由进 README）
-- [ ] `node: asset.plan`：从批准 beats 提取唯一 asset spec（scene_key 去重）
-- [ ] 候选生成：低清 3 张 → assets 表 `candidate`；签核 C 页面：候选网格 + 一键选优 + 选中的图标 `approved`
-- [ ] 失败重试 + 黑图/NSFW 基础拦截（有 API 能力就用，没有就人工看）
-
-**DoD**：2 角色各 1 参考图 + 2 表情、1 背景、候选点选全部落库；被 beat 引用的 asset 可解析。
+**DoD**：2 角色各 1 参考图 + 2 表情、1 背景、候选点选全部落库；被 beat 引用的 asset 可解析。（当前：代码与 mock 测试完成，待真实图像 key）
 
 ### T7 · 分镜生成 + 预览（2 天）
 
