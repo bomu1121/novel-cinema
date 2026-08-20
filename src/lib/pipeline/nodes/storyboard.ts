@@ -357,6 +357,22 @@ export async function buildStoryboard(
     drafts.push(...buildShotsForBeat(beat, ctx, beatIndex));
   });
 
+  // 人物入场/出场：本章内角色首次出现的镜头淡入，最后一次出现的镜头淡出
+  const firstBeatIdx = new Map<string, number>();
+  const lastBeatIdx = new Map<string, number>();
+  beats.forEach((beat) => {
+    if (!beat.character_id) return;
+    if (!firstBeatIdx.has(beat.character_id)) firstBeatIdx.set(beat.character_id, beat.idx);
+    lastBeatIdx.set(beat.character_id, beat.idx);
+  });
+  for (const draft of drafts) {
+    for (const layer of draft.layers) {
+      if (layer.kind !== "character" || !layer.characterId) continue;
+      if (draft.beatIdx === firstBeatIdx.get(layer.characterId)) layer.enter = "fade_in";
+      if (draft.beatIdx === lastBeatIdx.get(layer.characterId)) layer.exit = "fade_out";
+    }
+  }
+
   const inserted: Array<{ id: string; draft: ShotDraft }> = [];
   for (const draft of drafts) {
     const { data: shot, error } = await supabase

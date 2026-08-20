@@ -98,6 +98,12 @@ export default function BookDetailPage() {
                 多角色配音 / 签核 E →
               </Link>
               <Link
+                href={`/books/${bookId}/workbench`}
+                className="rounded-lg border border-zinc-900 px-3 py-1.5 text-sm font-medium hover:bg-zinc-900 hover:text-white"
+              >
+                编排台 →
+              </Link>
+              <Link
                 href={`/books/${bookId}/render`}
                 className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:border-zinc-900"
               >
