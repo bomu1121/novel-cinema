@@ -97,6 +97,12 @@ export default function BookDetailPage() {
               >
                 多角色配音 / 签核 E →
               </Link>
+              <Link
+                href={`/books/${bookId}/render`}
+                className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:border-zinc-900"
+              >
+                渲染 / 签核 F →
+              </Link>
             </div>
           </div>
           <p className="mt-1 text-sm text-zinc-500">

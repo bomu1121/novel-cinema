@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# local render test fixtures
+/.test-assets/
+
 # production
 /build
 

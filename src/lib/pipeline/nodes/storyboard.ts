@@ -420,12 +420,14 @@ export async function buildStoryboard(
       background_url: d.backgroundAssetId
         ? [...ctx.backgrounds].find((b) => b.id === d.backgroundAssetId)?.url ?? null
         : null,
+      background_asset_id: d.backgroundAssetId ?? null,
       layers: d.layers.map((layer) => {
         const asset = layer.assetId
           ? [...ctx.refsByCharacter.values(), ...ctx.expressionsByKey.values()].find((a) => a.id === layer.assetId)
           : null;
         return {
           kind: layer.kind,
+          asset_id: layer.assetId ?? null,
           asset_url: asset?.url ?? null,
           text: layer.kind === "text" ? d.text : undefined,
           rect: layer.rect,

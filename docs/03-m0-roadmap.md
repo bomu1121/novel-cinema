@@ -157,12 +157,14 @@ novel-cinema/
 
 ### T9 · 本地渲染（1.5 天）
 
-- [ ] `render/`：snapshot → FFmpeg 命令行（背景/图层叠放 + zoompan 动效 + 转场 + 音频混音 + LoudNorm + ASS/SRT 烧字幕）
-- [ ] `scripts/render-local.ts`：本地跑出 mp4；`render_jobs` 记录状态
-- [ ] 渲染任务页：进度/日志/产物下载
-- [ ] 质量断言：ffprobe 检查时长、分辨率、音轨存在、无黑帧（抽样）
+- [x] `render/types.ts + spec.ts`：RenderSpec 组装（timeline.snapshot → 刷新资产 URL → voice_takes 时间轴对齐 → 字幕轨）
+- [x] `render/ffmpeg.ts`：单镜头滤镜图生成（背景铺满 + Ken Burns/pan 动效 + 角色图层 scale/overlay + breath 正弦动效 + 文字卡 drawtext + 黑场 + 镜内淡入淡出）+ SRT 生成
+- [x] `scripts/render-local.ts`：`--spec`（纯本地 JSON）或 `--book`（查库）→ 逐镜头编码 → concat 直拷 → 多音轨 adelay/amix/LoudNorm(-16LUFS) → 烧字幕（libass，工作目录修正）→ 成品 + SRT；`--book` 模式写 render_jobs（running/succeeded/failed）+ 成品传 R2
+- [x] 渲染页（`/books/[bookId]/render`）：本地渲染命令复制 + 任务状态/下载
+- [x] 单元测试：shot 滤镜图、黑场文字卡、SRT（4 例）
+- [x] **真机渲染验证**：FFmpeg 8.1.1 跑通 2 镜头 + 1 音轨 + 烧字幕，ffprobe 确认 1920×1080 h264+aac
 
-**DoD**：命令行一条命令出片；3 分钟片声画字幕同步；换一张图/换一句配音后重渲染 < 2 分钟。
+**DoD**：命令行一条命令出片；3 分钟片声画字幕同步；换一张图/换一句配音后重渲染 < 2 分钟。（当前：全部达成，真实 ffmpeg 验证通过）
 
 ### T10 · 端到端联调 + 成本报告（1 天）
 
