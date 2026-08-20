@@ -121,7 +121,7 @@ function StoryboardCanvas() {
 
       // 布局不变式：beat 卡宽度 = max(150, 时长比例, 所有镜头卡总宽+间隔)，镜头永不出界、永不互叠
       const shotWidths = beatShots.map((shot: any) =>
-        Math.max(110, Number(shot.duration_sec || 1) * PX_PER_SEC - 6),
+        Math.max(168, Number(shot.duration_sec || 1) * PX_PER_SEC - 6),
       );
       const shotSpan = shotWidths.reduce((sum, w) => sum + w, 0) + Math.max(0, beatShots.length - 1) * 8;
       const beatW = Math.max(150, Number(beat.estimated_duration_sec || 2) * PX_PER_SEC, shotSpan);
@@ -156,6 +156,7 @@ function StoryboardCanvas() {
       let sx = 0;
       beatShots.forEach((shot: any, shotIndex: number) => {
         const shotW = shotWidths[shotIndex];
+        const shotH = Math.round(shotW * (9 / 16)); // 与成片 16:9 同比例
         const shotLayers = layersByShot.get(shot.id) ?? [];
         const bg = shot.background_asset_id ? assetsById.get(shot.background_asset_id) : null;
         const shotId = `shot-${shot.id}`;
@@ -181,7 +182,7 @@ function StoryboardCanvas() {
               motion: l.motion,
             })),
           },
-          style: { width: shotW, height: 152 },
+          style: { width: shotW, height: shotH },
         });
         edges.push({ id: `${beatId}->${shotId}`, source: beatId, target: shotId, type: "smoothstep" });
         sx += shotW + 8;
@@ -413,7 +414,7 @@ function StoryboardCanvas() {
             <div key={a.id} className="mt-1 flex items-center gap-1 rounded border border-zinc-200 p-1">
               {a.url && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={a.url} alt="" className="h-8 w-14 rounded object-cover" />
+                <img src={a.url} alt="" className="aspect-video w-full rounded object-cover" />
               )}
               <span className="truncate text-[10px]">{a.title ?? a.scene_key}</span>
             </div>
@@ -565,7 +566,7 @@ function StoryboardCanvas() {
               const showAsset = charAssets[currentIdx >= 0 ? currentIdx : 0];
               return (
                 <div className="rounded-lg border border-zinc-300 bg-zinc-900 p-1">
-                  <div className="relative h-44">
+                  <div className="relative aspect-video">
                     {showAsset?.url && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={showAsset.url} alt="" className="h-full w-full object-contain" />

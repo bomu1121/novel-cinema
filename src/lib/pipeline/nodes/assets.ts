@@ -16,6 +16,7 @@ export interface AssetPlanSpec {
   kind: ImageKind;
   prompt: string;
   negativePrompt: string;
+  aspect?: "16:9" | "9:16" | "1:1";
   characterId: string | null;
   characterName: string | null;
   locationId: string | null;
@@ -204,6 +205,7 @@ export async function listAssetPlan(bookId: string): Promise<AssetPlan> {
         mood: "suspense",
       }),
       negativePrompt: negative,
+      aspect: "16:9",
       characterId: null,
       characterName: null,
       locationId: l.id,
@@ -224,6 +226,7 @@ export async function listAssetPlan(bookId: string): Promise<AssetPlan> {
         mood: "opening atmosphere",
       }),
       negativePrompt: negative,
+      aspect: "16:9",
       characterId: null,
       characterName: null,
       locationId: null,
@@ -315,7 +318,7 @@ export async function generateAssetPhase(
             ? process.env.IMAGE_MODEL_I2I ?? ""
             : process.env.IMAGE_MODEL_T2I ?? "",
         count: spec.count,
-        aspect_ratio: "1:1",
+        aspect_ratio: spec.aspect ?? "1:1",
         status: "running",
       })
       .select("id")
@@ -345,6 +348,7 @@ export async function generateAssetPhase(
         prompt: spec.prompt,
         negativePrompt: spec.negativePrompt,
         count: spec.count,
+        aspect: spec.aspect,
         refImageUrls: refUrls.length > 0 ? refUrls : undefined,
       });
 

@@ -7,6 +7,8 @@ beforeAll(() => {
   process.env.IMAGE_MODEL_T2I = "test-t2i";
   process.env.IMAGE_MODEL_I2I = "test-i2i";
   process.env.IMAGE_SIZE = "1K";
+  process.env.IMAGE_SIZE_16X9 = "1280x720";
+  process.env.IMAGE_SIZE_9X16 = "720x1280";
 });
 
 afterEach(() => {
@@ -53,6 +55,17 @@ describe("SeedreamProvider", () => {
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
     expect(body.model).toBe("test-i2i");
     expect(body.image).toEqual(["https://ref.test/char.png"]);
+  });
+
+  it("背景 16:9 / 竖版 9:16 使用对应尺寸", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okImages(1));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getImageProvider().generate({ kind: "background", prompt: "wide", aspect: "16:9", count: 1 });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).size).toBe("1280x720");
+
+    await getImageProvider().generate({ kind: "background", prompt: "tall", aspect: "9:16", count: 1 });
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body as string).size).toBe("720x1280");
   });
 
   it("watermark 参数被拒绝时自动去掉重试", async () => {

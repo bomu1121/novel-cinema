@@ -58,6 +58,12 @@ export class SeedreamProvider implements ImageProvider {
     return requireEnv("IMAGE_MODEL_T2I");
   }
 
+  private sizeFor(aspect: ImageGenSpec["aspect"]): string {
+    if (aspect === "16:9") return process.env.IMAGE_SIZE_16X9 || "1280x720";
+    if (aspect === "9:16") return process.env.IMAGE_SIZE_9X16 || "720x1280";
+    return process.env.IMAGE_SIZE || "1K";
+  }
+
   async generate(spec: ImageGenSpec): Promise<GeneratedImage[]> {
     const hasRef = Boolean(spec.refImageUrls?.length);
     const body: Record<string, unknown> = {
@@ -66,7 +72,7 @@ export class SeedreamProvider implements ImageProvider {
         .filter(Boolean)
         .join(" "),
       n: Math.min(4, Math.max(1, spec.count ?? 3)),
-      size: process.env.IMAGE_SIZE || "1K",
+      size: this.sizeFor(spec.aspect),
       response_format: "url",
       watermark: false,
     };

@@ -18,6 +18,8 @@ const envSchema = z.object({
   IMAGE_MODEL_T2I: z.string().optional(),
   IMAGE_MODEL_I2I: z.string().optional(),
   IMAGE_SIZE: z.string().optional(),
+  IMAGE_SIZE_16X9: z.string().optional(),
+  IMAGE_SIZE_9X16: z.string().optional(),
   TTS_PROVIDER: z.string().optional(),
   TTS_API_KEY: z.string().optional(),
   TTS_API_BASE: z.string().optional(),
