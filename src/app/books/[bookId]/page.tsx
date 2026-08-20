@@ -104,6 +104,12 @@ export default function BookDetailPage() {
                 编排台 →
               </Link>
               <Link
+                href={`/books/${bookId}/canvas`}
+                className="rounded-lg border border-indigo-500 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-500 hover:text-white"
+              >
+                分镜画布 →
+              </Link>
+              <Link
                 href={`/books/${bookId}/render`}
                 className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:border-zinc-900"
               >
