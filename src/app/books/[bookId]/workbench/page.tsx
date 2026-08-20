@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { useToast } from "@/components/toast";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -21,6 +22,7 @@ interface WorkbenchData {
   voiceProfiles?: any[];
   timeline?: any;
   renderJobs?: any[];
+  estimates?: Record<string, string>;
 }
 
 const ENTER_EXIT = ["none", "fade_in", "fade_out", "slide_left", "slide_right", "slide_up", "slide_down"];
@@ -34,7 +36,21 @@ export default function WorkbenchPage() {
   const [data, setData] = useState<WorkbenchData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<{ node: string; label: string } | null>(null);
   const [edits, setEdits] = useState<Record<string, Record<string, unknown>>>({});
+  const toast = useToast();
+
+  async function undo() {
+    try {
+      const res = await fetch(`/api/books/${bookId}/workbench/undo`, { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "撤销失败");
+      toast.push("info", `已撤销对 ${json.table} 的修改`, undefined);
+      await load();
+    } catch (err) {
+      toast.push("error", err instanceof Error ? err.message : String(err));
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -53,7 +69,6 @@ export default function WorkbenchPage() {
 
   useEffect(() => {
     // 挂载后拉取编排台；setState 均在异步回调内
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 
@@ -65,7 +80,7 @@ export default function WorkbenchPage() {
     void row; // 保留行引用参数，实际以 edits 为准
     const patch = edits[`${table}:${id}`] ?? {};
     if (Object.keys(patch).length === 0) {
-      setError("没有修改");
+      toast.push("info", "没有修改", undefined);
       return;
     }
     setBusy(`${table}:${id}`);
@@ -77,7 +92,7 @@ export default function WorkbenchPage() {
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error ?? "保存失败");
+        toast.push("error", json.error ?? "保存失败");
         return;
       }
       setEdits((prev) => {
@@ -85,10 +100,14 @@ export default function WorkbenchPage() {
         delete next[`${table}:${id}`];
         return next;
       });
+      toast.push("success", `已保存 ${table}:${id.slice(0, 6)}`, {
+        label: "撤销",
+        onAction: () => void undo(),
+      });
       setError(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      toast.push("error", err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(null);
     }
@@ -104,20 +123,21 @@ export default function WorkbenchPage() {
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error ?? "保存失败");
+        toast.push("error", json.error ?? "保存失败");
         return;
       }
+      toast.push("success", `已保存 JSON（${table}）`, { label: "撤销", onAction: () => void undo() });
       setError(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "JSON 解析失败：" + String(err));
+      toast.push("error", err instanceof Error ? err.message : "JSON 解析失败：" + String(err));
     }
   }
 
-  async function rerun(node: string, label: string) {
-    if (!confirm(`重跑「${label}」？将消耗 API 费用并覆盖该节点下游。`)) return;
+  async function executeRerun(node: string) {
     setBusy(`rerun:${node}`);
     setError(null);
+    toast.push("progress", `正在重跑 ${node}…`, undefined);
     try {
       const res = await fetch(`/api/books/${bookId}/workbench/rerun`, {
         method: "POST",
@@ -126,15 +146,21 @@ export default function WorkbenchPage() {
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error ?? `重跑失败（HTTP ${res.status}）`);
+        toast.push("error", json.error ?? `重跑失败（HTTP ${res.status}）`);
         return;
       }
+      toast.push("success", `重跑完成：${node}`, undefined);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      toast.push("error", err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(null);
+      setConfirming(null);
     }
+  }
+
+  function rerun(node: string, label: string) {
+    setConfirming({ node, label });
   }
 
   const cur = (key: string, row: any, field: string) => edits[key]?.[field] ?? row?.[field];
@@ -178,6 +204,28 @@ export default function WorkbenchPage() {
             </button>
           ))}
         </div>
+
+        {confirming && (
+          <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-xs">
+            <p className="font-semibold text-blue-900">确认重跑「{confirming.label}」？</p>
+            <p className="mt-1 text-blue-800">{data?.estimates?.[confirming.node] ?? "影响与费用未知"}</p>
+            <div className="mt-2 flex gap-2">
+              <button
+                onClick={() => executeRerun(confirming.node)}
+                className="rounded-lg bg-blue-700 px-3 py-1.5 text-white"
+              >
+                执行
+              </button>
+              <button
+                onClick={() => setConfirming(null)}
+                className="rounded-lg border border-blue-300 px-3 py-1.5"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        )}
+
         <p className="mt-2 text-xs text-zinc-500">
           章节 {data?.chapters?.length ?? 0} · 人物 {data?.characters?.length ?? 0} · beats{" "}
           {data?.beats?.length ?? 0} · 镜头 {data?.shots?.length ?? 0} · 图层 {data?.layers?.length ?? 0} · 资产{" "}
@@ -476,3 +524,4 @@ function JsonDetails({
     </details>
   );
 }
+

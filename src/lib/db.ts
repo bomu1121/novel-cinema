@@ -27,7 +27,7 @@ const JSON_COLUMNS = new Set([
   "style", "snapshot", "publish_meta", "preset", "error", "input_ref",
   "output_ref", "cost", "ai_report", "human_decision", "input_snapshot",
   "aliases", "genre", "character_ids", "related_character_ids",
-  "related_item_ids", "clue_ids",
+  "related_item_ids", "clue_ids", "before_json",
 ]);
 
 function encodeRow(table: string, row: Record<string, any>): Record<string, any> {
@@ -729,6 +729,15 @@ CREATE TABLE IF NOT EXISTS chapter_contexts (
   created_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS snapshots (
+  id TEXT PRIMARY KEY,
+  book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+  table_name TEXT NOT NULL,
+  row_id TEXT NOT NULL,
+  before_json TEXT NOT NULL,
+  created_at TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_source_chapters_book ON source_chapters(book_id);
 CREATE INDEX IF NOT EXISTS idx_characters_book ON characters(book_id);
 CREATE INDEX IF NOT EXISTS idx_assets_book_scene ON assets(book_id, scene_key);
@@ -736,6 +745,7 @@ CREATE INDEX IF NOT EXISTS idx_beats_chapter ON beats(adapted_chapter_id, idx);
 CREATE INDEX IF NOT EXISTS idx_voice_takes_beat ON voice_takes(beat_id);
 CREATE INDEX IF NOT EXISTS idx_timelines_book ON timelines(book_id, kind, version);
 CREATE INDEX IF NOT EXISTS idx_jobs_book ON jobs(book_id, node, status);
+CREATE INDEX IF NOT EXISTS idx_snapshots_book ON snapshots(book_id, created_at);
   `);
 }
 

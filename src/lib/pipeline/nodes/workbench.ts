@@ -76,6 +76,13 @@ export async function getWorkbench(bookId: string) {
     ),
   );
 
+  const estimateNodes: RerunNode[] = ["analyze", "adapt", "assets-phase1", "assets-phase2", "storyboard", "voice"];
+  const estimates = Object.fromEntries(
+    await Promise.all(
+      estimateNodes.map(async (n) => [n, await estimateRerun(bookId, n).catch(() => "暂无法估算")]),
+    ),
+  );
+
   return {
     book: bookRes.data,
     chapters: chaptersRes.data ?? [],
@@ -92,16 +99,17 @@ export async function getWorkbench(bookId: string) {
     voiceProfiles: profilesRes.data ?? [],
     timeline: timelineRes.data,
     renderJobs: jobsRes.data ?? [],
+    estimates,
   };
 }
 
-/** 编辑中间态：先校验归属，再更新，最后向下游传播 stale */
+/** 编辑中间态：先校验归属，再存快照，更新，最后向下游传播 stale */
 export async function patchWorkbenchRow(
   bookId: string,
   table: string,
   id: string,
   patch: Record<string, unknown>,
-): Promise<void> {
+): Promise<{ snapshotId: string | null }> {
   if (!EDITABLE_TABLES.has(table)) throw new Error(`不允许编辑表: ${table}`);
   const s = getSupabaseAdmin();
 
@@ -115,9 +123,87 @@ export async function patchWorkbenchRow(
     if (!row || row.book_id !== bookId) throw new Error("记录不属于本书");
   }
 
+  // 撤销快照（I0）：保存修改前的完整行
+  let snapshotId: string | null = null;
+  const before = await s.from(table).select("*").eq("id", id).single();
+  if (before.data) {
+    const snap = await s
+      .from("snapshots")
+      .insert({ book_id: bookId, table_name: table, row_id: id, before_json: before.data })
+      .select("id")
+      .single();
+    snapshotId = snap.data?.id ?? null;
+  }
+
   const { error } = await s.from(table).update(patch).eq("id", id);
-  if (error) throw new Error(error.message ?? "更新失败");
+  if (error) {
+    if (snapshotId) await s.from("snapshots").delete().eq("id", snapshotId);
+    throw new Error(error.message ?? "更新失败");
+  }
   await propagateStale(bookId, table, id);
+  return { snapshotId };
+}
+
+/** 撤销最近一次编排修改（I0） */
+export async function undoLatest(bookId: string): Promise<{ table: string; rowId: string }> {
+  const s = getSupabaseAdmin();
+  const { data: snap } = await s
+    .from("snapshots")
+    .select("id, table_name, row_id, before_json")
+    .eq("book_id", bookId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!snap) throw new Error("没有可撤销的操作");
+  if (!EDITABLE_TABLES.has(snap.table_name)) throw new Error("快照表不可写");
+
+  const before = snap.before_json as Record<string, unknown>;
+  const rest = Object.fromEntries(
+    Object.entries(before).filter(([key]) => key !== "id" && key !== "book_id"),
+  );
+  const { error } = await s.from(snap.table_name).update(rest).eq("id", snap.row_id);
+  if (error) throw new Error(error.message ?? "恢复失败");
+  await s.from("snapshots").delete().eq("id", snap.id);
+  await propagateStale(bookId, snap.table_name, snap.row_id);
+  return { table: snap.table_name, rowId: snap.row_id };
+}
+
+/** 单节点影响预报（I0：按按钮前让用户知道将发生什么） */
+export async function estimateRerun(bookId: string, node: RerunNode): Promise<string> {
+  const s = getSupabaseAdmin();
+  switch (node) {
+    case "analyze": {
+      const { data: ch } = await s.from("source_chapters").select("char_count").eq("book_id", bookId).eq("idx", 1).single();
+      const chars = ch?.char_count ?? 0;
+      return `分析 1 章（${chars} 字）· 约 2 次 LLM 调用 · 30~60s · 生成 3 套风格候选`;
+    }
+    case "adapt": {
+      const { data: ch } = await s.from("source_chapters").select("char_count").eq("book_id", bookId).eq("idx", 1).single();
+      const chars = ch?.char_count ?? 0;
+      return `改编 1 章（${chars} 字）· 约 2 次 LLM 调用 · 30~90s · 会覆盖现有 beats`;
+    }
+    case "assets-phase1": {
+      const plan = await import("./assets").then((m) => m.listAssetPlan(bookId));
+      const n = plan.phase1.filter((x) => !x.skipReason).length;
+      return `生成 ${n} 张设定图/背景 · 每张 1 次图像调用 · 约 ${n * 20}s · 生成后需人工点选`;
+    }
+    case "assets-phase2": {
+      const plan = await import("./assets").then((m) => m.listAssetPlan(bookId));
+      const n = plan.phase2.filter((x) => !x.skipReason).length;
+      return `生成 ${n} 张表情变体 · 每张 1 次图像调用（含参考图）· 约 ${n * 20}s`;
+    }
+    case "storyboard": {
+      const { data: shots } = await s.from("shots").select("id").eq("book_id", bookId);
+      return `零 AI 成本 · 重建 ${shots?.length ?? 0} 个镜头 · 约 3s · 会覆盖镜头与图层的手工修改（可撤销）`;
+    }
+    case "voice": {
+      const { data: beats } = await s.from("beats").select("id").eq("book_id", bookId);
+      const n = beats?.length ?? 0;
+      return `为缺失的句子合成配音（当前 ${n} 句 beat）· 每句 1 次 TTS · 约 ${Math.max(10, n * 5)}s`;
+    }
+    default:
+      return "未知节点";
+  }
 }
 
 async function propagateStale(bookId: string, table: string, id: string): Promise<void> {

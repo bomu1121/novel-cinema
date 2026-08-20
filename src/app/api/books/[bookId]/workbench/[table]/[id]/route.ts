@@ -11,8 +11,8 @@ export async function PATCH(
     if (!body.patch || typeof body.patch !== "object") {
       return NextResponse.json({ error: "需要 patch 对象" }, { status: 400 });
     }
-    await patchWorkbenchRow(bookId, table, id, body.patch);
-    return NextResponse.json({ ok: true });
+    const result = await patchWorkbenchRow(bookId, table, id, body.patch);
+    return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     const message =
       (err as { message?: string })?.message ??

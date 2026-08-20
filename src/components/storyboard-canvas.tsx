@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import { useToast } from "@/components/toast";
 import {
   Background,
   Controls,
@@ -28,6 +29,7 @@ interface CanvasData {
   characters?: any[];
   voiceTakes?: any[];
   timeline?: any;
+  estimates?: Record<string, string>;
 }
 
 export default function StoryboardCanvasShell() {
@@ -47,7 +49,21 @@ function StoryboardCanvas() {
   const [error, setError] = useState<string | null>(null);
   const [selectedShotId, setSelectedShotId] = useState<string | null>(null);
   const [selectedBeatId, setSelectedBeatId] = useState<string | null>(null);
+  const [confirmingNode, setConfirmingNode] = useState<string | null>(null);
   const [edits, setEdits] = useState<Record<string, Record<string, unknown>>>({});
+  const toast = useToast();
+
+  async function undo() {
+    try {
+      const res = await fetch(`/api/books/${bookId}/workbench/undo`, { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "撤销失败");
+      toast.push("info", "已撤销上一次修改", undefined);
+      await load();
+    } catch (err) {
+      toast.push("error", err instanceof Error ? err.message : String(err));
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -66,7 +82,6 @@ function StoryboardCanvas() {
 
   useEffect(() => {
     // 挂载后拉取画布数据；setState 均在异步回调内
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 
@@ -176,10 +191,13 @@ function StoryboardCanvas() {
         body: JSON.stringify({ patch }),
       });
       const json = await res.json();
-      if (!res.ok) setError(json.error ?? "保存失败");
-      else await load();
+      if (!res.ok) toast.push("error", json.error ?? "保存失败");
+      else {
+        toast.push("success", "已保存 beat（记得重配音本句）", { label: "撤销", onAction: () => void undo() });
+        await load();
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      toast.push("error", err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -191,11 +209,13 @@ function StoryboardCanvas() {
         body: JSON.stringify({ patch }),
       });
       const json = await res.json();
-      if (!res.ok) setError(json.error ?? "保存失败");
-      else await load();
+      if (!res.ok) toast.push("error", json.error ?? "保存失败");
+      else {
+        toast.push("success", "已保存镜头", { label: "撤销", onAction: () => void undo() });
+        await load();
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
+      toast.push("error", err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -207,15 +227,18 @@ function StoryboardCanvas() {
         body: JSON.stringify({ patch }),
       });
       const json = await res.json();
-      if (!res.ok) setError(json.error ?? "保存失败");
-      else await load();
+      if (!res.ok) toast.push("error", json.error ?? "保存失败");
+      else {
+        toast.push("success", "已保存图层", { label: "撤销", onAction: () => void undo() });
+        await load();
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
+      toast.push("error", err instanceof Error ? err.message : String(err));
     }
   }
 
-  async function rerun(node: string) {
+  async function executeRerun(node: string) {
+    toast.push("progress", `正在重跑 ${node}…`, undefined);
     try {
       const res = await fetch(`/api/books/${bookId}/workbench/rerun`, {
         method: "POST",
@@ -223,12 +246,20 @@ function StoryboardCanvas() {
         body: JSON.stringify({ node }),
       });
       const json = await res.json();
-      if (!res.ok) setError(json.error ?? "重跑失败");
-      else await load();
+      if (!res.ok) toast.push("error", json.error ?? "重跑失败");
+      else {
+        toast.push("success", `重跑完成：${node}`, undefined);
+        await load();
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      toast.push("error", err instanceof Error ? err.message : String(err));
     } finally {
+      setConfirmingNode(null);
     }
+  }
+
+  function rerun(node: string) {
+    setConfirmingNode(node);
   }
 
   function onDrop(e: React.DragEvent) {
@@ -237,7 +268,7 @@ function StoryboardCanvas() {
     if (!assetId) return;
     const asset = assetsById.get(assetId);
     if (!asset || asset.kind === "background") {
-      setError("只能把角色图（设定图/表情）拖到镜头上；背景请在镜头属性里换。");
+      toast.push("error", "只能把角色图（设定图/表情）拖到镜头上；背景请在镜头属性里换。");
       return;
     }
     const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
@@ -248,7 +279,7 @@ function StoryboardCanvas() {
       return pos.x >= n.position.x && pos.x <= n.position.x + w && pos.y >= n.position.y && pos.y <= n.position.y + h;
     });
     if (!hit) {
-      setError("没有拖到镜头上。");
+      toast.push("error", "没有拖到镜头上。");
       return;
     }
     const shotId = String(hit.data?.shotId);
@@ -257,7 +288,7 @@ function StoryboardCanvas() {
       shotLayers.find((l: any) => l.character_id === asset.character_id) ??
       shotLayers[0];
     if (!target) {
-      setError("该镜头还没有人物图层：先在右侧检查器把某图层的人物绑定好，或到编排台修改。");
+      toast.push("error", "该镜头还没有人物图层：先在右侧检查器把某图层的人物绑定好，或到编排台修改。");
       return;
     }
     void patchLayer(target.id, { asset_id: assetId });
@@ -299,6 +330,16 @@ function StoryboardCanvas() {
           <button onClick={() => rerun("voice")} className="w-full rounded-lg border px-2 py-2 text-xs">
             重跑配音
           </button>
+          {confirmingNode && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-2 text-[10px] text-blue-900">
+              <p className="font-semibold">确认重跑？</p>
+              <p className="mt-1">{data.estimates?.[confirmingNode] ?? "影响未知"}</p>
+              <div className="mt-1 flex gap-1">
+                <button onClick={() => executeRerun(confirmingNode)} className="rounded bg-blue-700 px-2 py-1 text-white">执行</button>
+                <button onClick={() => setConfirmingNode(null)} className="rounded border border-blue-300 px-2 py-1">取消</button>
+              </div>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -552,4 +593,6 @@ function ShotNode({ data }: any) {
     </div>
   );
 }
+
+
 
