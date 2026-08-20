@@ -34,7 +34,7 @@ describe("buildShotGraph", () => {
     expect(graph.inputs).toHaveLength(2);
     expect(graph.filterComplex).toContain("zoompan");
     expect(graph.filterComplex).toContain("sin(2*PI*t/2.6)");
-    expect(graph.filterComplex).toContain("fade=t=in:st=0:d=0.3");
+    expect(graph.filterComplex).toContain("fade=t=in:st=0:d=0.4");
     expect(graph.filterComplex).toContain("[outv]");
   });
 

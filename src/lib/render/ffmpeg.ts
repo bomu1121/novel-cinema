@@ -4,6 +4,8 @@ export interface ShotGraphOptions {
   width: number;
   height: number;
   fps: number;
+  /** 是否在镜头首尾加边界淡入淡出（全片 xfade 链模式应关闭，避免双重变暗） */
+  trackFades?: boolean;
 }
 
 export interface ShotGraph {
@@ -156,13 +158,18 @@ export function buildShotGraph(
     fileInputIndex += 1;
   }
 
-  // 转场（v0：镜内淡入淡出近似，正式 crossfade 在 M1 做重叠拼接）
+  // 转场（单镜头预览模式：镜内淡入淡出；全片 xfade 链模式关闭边界淡入淡出）
+  const applyTrackFades = opts.trackFades !== false;
   const fadeIn =
-    track.transition_in === "fade_in" || track.transition_in === "crossfade"
+    applyTrackFades &&
+    (track.transition_in === "fade_in" || track.transition_in === "crossfade")
       ? `,fade=t=in:st=0:d=0.4`
       : "";
   const fadeOut =
-    track.transition_out === "fade_out" || track.transition_out === "crossfade" || track.transition_out === "dip_to_black"
+    applyTrackFades &&
+    (track.transition_out === "fade_out" ||
+      track.transition_out === "crossfade" ||
+      track.transition_out === "dip_to_black")
       ? `,fade=t=out:st=${Math.max(0, dur - 0.4).toFixed(2)}:d=0.4`
       : "";
 

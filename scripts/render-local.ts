@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { buildShotGraph, buildSrt } from "../src/lib/render/ffmpeg";
+import { buildXfadeChain, planShotGroups, totalDurationSec } from "../src/lib/render/transitions";
 import type { RenderSpec, RenderVideoTrack } from "../src/lib/render/types";
 
 interface CliArgs {
@@ -128,7 +129,7 @@ async function main() {
         });
       }
 
-      const graph = buildShotGraph(track, { width: W, height: H, fps });
+      const graph = buildShotGraph(track, { width: W, height: H, fps, trackFades: false });
       const segPath = join(segDir, `seg_${String(i).padStart(4, "0")}.mp4`);
       const inputArgs: string[] = [];
       for (const input of graph.inputs) {
@@ -167,11 +168,52 @@ async function main() {
       segments.push(segPath);
     }
 
-    // 2. concat（同参数直拷）
+    // 2. 重叠转场合成：按 cut 分组；组内 xfade 真实重叠；组间 concat 硬切
+    const groups = planShotGroups(spec.video_tracks);
+    const groupFiles: string[] = [];
+    const concatItems: string[] = [];
+    for (let g = 0; g < groups.length; g++) {
+      const group = groups[g];
+      if (group.indices.length === 1) {
+        concatItems.push(segments[group.indices[0]]);
+        continue;
+      }
+      const { filter, durationSec } = buildXfadeChain(spec.video_tracks, group);
+      const groupPath = join(tmpDir, `group_${String(g).padStart(4, "0")}.mp4`);
+      const inputs: string[] = [];
+      for (const idx of group.indices) inputs.push("-i", segments[idx]);
+      run(
+        "ffmpeg",
+        [
+          "-y",
+          ...inputs,
+          "-filter_complex",
+          filter,
+          "-map",
+          "[out]",
+          "-t",
+          durationSec.toFixed(3),
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "20",
+          "-pix_fmt",
+          "yuv420p",
+          "-an",
+          groupPath,
+        ],
+        `转场组 ${g + 1}/${groups.length}`,
+      );
+      concatItems.push(groupPath);
+      groupFiles.push(groupPath);
+    }
+
     const listPath = join(tmpDir, "list.txt");
     writeFileSync(
       listPath,
-      segments.map((s) => `file '${s.replace(/'/g, "'\\''")}'`).join("\n"),
+      concatItems.map((s) => `file '${s.replace(/'/g, "'\\''")}'`).join("\n"),
     );
     const concatPath = join(tmpDir, "concat.mp4");
     run("ffmpeg", ["-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", concatPath], "concat");
@@ -230,9 +272,18 @@ async function main() {
       videoPath = muxPath;
     }
 
-    // 4. 烧字幕
-    if (subtitlePath && !args.noBurn) {
+    // 4. 全局首尾淡入淡出 + 烧字幕（xfade 已负责中间重叠转场）
+    const timelineDuration = totalDurationSec(spec.video_tracks);
+    const needStartFade = spec.video_tracks[0]?.transition_in === "fade_in";
+    const needEndFade = spec.video_tracks[spec.video_tracks.length - 1]?.transition_out === "fade_out";
+    const wantSubtitles = Boolean(subtitlePath && !args.noBurn);
+
+    if (needStartFade || needEndFade || wantSubtitles) {
       const burnedPath = join(tmpDir, "burned.mp4");
+      const vf: string[] = [];
+      if (needStartFade) vf.push("fade=t=in:st=0:d=0.5");
+      if (needEndFade) vf.push(`fade=t=out:st=${Math.max(0, timelineDuration - 0.5).toFixed(2)}:d=0.5`);
+      if (wantSubtitles) vf.push("subtitles=subs.srt");
       try {
         run(
           "ffmpeg",
@@ -241,7 +292,7 @@ async function main() {
             "-i",
             videoPath,
             "-vf",
-            "subtitles=subs.srt",
+            vf.join(","),
             "-c:v",
             "libx264",
             "-preset",
@@ -252,12 +303,12 @@ async function main() {
             "copy",
             burnedPath,
           ],
-          "烧字幕",
+          wantSubtitles ? "烧字幕/首尾淡入淡出" : "首尾淡入淡出",
           tmpDir,
         );
         videoPath = burnedPath;
       } catch (err) {
-        console.warn("烧字幕失败，保留 SRT 外挂：", err);
+        console.warn("字幕/首尾淡入淡出失败，保留原始视频：", err);
       }
     }
 
@@ -268,7 +319,9 @@ async function main() {
     }
 
     console.log(`\n渲染完成：${outPath}`);
-    console.log(`镜头 ${segments.length} · 音频 ${audioUrls.length} 轨 · 时长 ${spec.duration_sec}s`);
+    console.log(
+      `镜头 ${segments.length} · 转场组 ${groups.length} · 音频 ${audioUrls.length} 轨 · 时长 ${timelineDuration.toFixed(2)}s`,
+    );
 
     // 记录成功 + 成品入 R2（可选）
     if (renderJobId) {
@@ -290,7 +343,7 @@ async function main() {
           .update({
             status: "succeeded",
             output_file_key: outputKey,
-            duration_sec: spec.duration_sec,
+            duration_sec: timelineDuration,
             finished_at: new Date().toISOString(),
           })
           .eq("id", renderJobId);
