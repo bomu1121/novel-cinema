@@ -117,7 +117,15 @@ function StoryboardCanvas() {
     const edges: Edge[] = [];
     let cursor = 0;
     beats.forEach((beat: any) => {
-      const beatW = Math.max(150, Number(beat.estimated_duration_sec || 2) * PX_PER_SEC);
+      const beatShots = shotsByBeat.get(beat.id) ?? [];
+
+      // 布局不变式：beat 卡宽度 = max(150, 时长比例, 所有镜头卡总宽+间隔)，镜头永不出界、永不互叠
+      const shotWidths = beatShots.map((shot: any) =>
+        Math.max(110, Number(shot.duration_sec || 1) * PX_PER_SEC - 6),
+      );
+      const shotSpan = shotWidths.reduce((sum, w) => sum + w, 0) + Math.max(0, beatShots.length - 1) * 8;
+      const beatW = Math.max(150, Number(beat.estimated_duration_sec || 2) * PX_PER_SEC, shotSpan);
+
       const beatId = `beat-${beat.id}`;
       const char = beat.character_id ? charactersById.get(beat.character_id) : null;
       const take = takeByBeat.get(beat.id);
@@ -146,9 +154,8 @@ function StoryboardCanvas() {
       });
 
       let sx = 0;
-      const beatShots = shotsByBeat.get(beat.id) ?? [];
-      beatShots.forEach((shot: any) => {
-        const shotW = Math.max(110, Number(shot.duration_sec || 1) * PX_PER_SEC - 6);
+      beatShots.forEach((shot: any, shotIndex: number) => {
+        const shotW = shotWidths[shotIndex];
         const shotLayers = layersByShot.get(shot.id) ?? [];
         const bg = shot.background_asset_id ? assetsById.get(shot.background_asset_id) : null;
         const shotId = `shot-${shot.id}`;
