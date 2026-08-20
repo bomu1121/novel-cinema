@@ -1,0 +1,51 @@
+import { z } from "zod";
+
+/**
+ * 服务端环境变量白名单。
+ * 只有在这里声明的变量才允许被服务端代码读取，避免拼错 key 静默失败。
+ */
+const envSchema = z.object({
+  // Supabase
+  DATABASE_URL: z.string().optional(),
+  SUPABASE_URL: z.string().optional(),
+  SUPABASE_ANON_KEY: z.string().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+
+  // Cloudflare R2
+  R2_ACCOUNT_ID: z.string().optional(),
+  R2_ACCESS_KEY_ID: z.string().optional(),
+  R2_SECRET_ACCESS_KEY: z.string().optional(),
+  R2_BUCKET: z.string().optional(),
+  R2_PUBLIC_URL: z.string().optional(),
+
+  // LLM（OpenAI 兼容）
+  LLM_API_KEY: z.string().optional(),
+  LLM_BASE_URL: z.string().optional(),
+  LLM_CHEAP_MODEL: z.string().optional(),
+  LLM_STRONG_MODEL: z.string().optional(),
+
+  // 图像 / TTS / ASR / 渲染
+  IMAGE_PROVIDER: z.string().optional(),
+  IMAGE_API_KEY: z.string().optional(),
+  IMAGE_BASE_URL: z.string().optional(),
+  TTS_PROVIDER: z.string().optional(),
+  TTS_API_KEY: z.string().optional(),
+  ASR_PROVIDER: z.string().optional(),
+  ASR_API_KEY: z.string().optional(),
+  RENDER_ENDPOINT: z.string().optional(),
+});
+
+export type Env = z.infer<typeof envSchema>;
+
+export function getEnv(): Env {
+  return envSchema.parse(process.env);
+}
+
+/** 要求某个服务端变量必须存在（在节点真正需要时调用，而非应用启动时）。 */
+export function requireEnv<T extends keyof Env>(key: T): string {
+  const value = process.env[key];
+  if (!value) {
+    throw new Error(`Missing required env var: ${key}`);
+  }
+  return value;
+}
