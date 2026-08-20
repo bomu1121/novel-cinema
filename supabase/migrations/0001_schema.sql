@@ -368,7 +368,8 @@ create table shot_layers (
   z smallint not null default 0,
   kind layer_kind not null default 'character',
   character_id uuid references characters(id),
-  asset_id uuid not null references assets(id),
+  -- text/overlay 层无图片资产，允许为空
+  asset_id uuid references assets(id),
   expression text,
   pose text,
   rect jsonb not null default '{"x":0.5,"y":0.5,"w":0.4,"h":0.6}'::jsonb,

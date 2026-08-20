@@ -134,13 +134,14 @@ novel-cinema/
 
 ### T7 · 分镜生成 + 预览（2 天）
 
-- [ ] `node: storyboard`：实现 docs/02 的镜头语法规则表 → shots + shot_layers
-- [ ] 时间轴预览页：横向时间轴、shot 卡片（背景缩略图 + 图层堆叠）、点击改 asset/时长/机位；调整写 `locked=true`
-- [ ] 图层动效预览：CSS 近似实现 Ken Burns / breath / pan / 入场退场，保证“手放上去画面是动的”
-- [ ] `timelines.snapshot` 生成（v1）并打 `preview` 标签
-- [ ] 签核 D：批准后 snapshot 冻结
+- [x] `node: storyboard`：docs/02 镜头语法规则表 v0 实现（旁白 Ken Burns 交替 / 对白 push_in + 呼吸动效 / 动作双镜头快切 / 文字卡淡入淡出 / 蒙太奇多背景 crossfade / 黑场过渡）
+- [x] 角色图层：按 beat 情绪匹配已批准表情资产，fallback 角色设定图；无角色层时纯背景镜头
+- [x] 幂等重建：重跑先清旧 shots/layers，再生成 preview `timelines.snapshot`（含图层 rect/motion/转场/URL）
+- [x] 时间轴预览页（`/books/[bookId]/storyboard`）：横向镜头卡片 + CSS 近似 Ken Burns/pan/breath 动效 + 文字卡预览；人工改时长/换背景写 locked；批准（签核 D）
+- [x] API：`GET .../storyboard`、`POST .../storyboard/build|approve`、`PATCH .../shots/[shotId]`
+- [ ] 真实资产联调：配好 Supabase/R2/图像 key 后跑通“脚本→资产→分镜”全链
 
-**DoD**：不写一行 AI，从批准 beats+assets 确定性产出可渲染 snapshot；人工换图/改时长后重生成 snapshot 不重跑 AI。
+**DoD**：不写一行 AI，从批准 beats+assets 确定性产出可渲染 snapshot；人工换图/改时长后重生成 snapshot 不重跑 AI。（当前：代码完成，待真实资产环境验证）
 
 ### T8 · 配音 + ASR（1.5 天）
 

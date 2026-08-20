@@ -85,6 +85,12 @@ export default function BookDetailPage() {
               >
                 资产库 / 签核 C →
               </Link>
+              <Link
+                href={`/books/${bookId}/storyboard`}
+                className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:border-zinc-900"
+              >
+                分镜时间轴 / 签核 D →
+              </Link>
             </div>
           </div>
           <p className="mt-1 text-sm text-zinc-500">

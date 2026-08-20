@@ -24,3 +24,25 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* 分镜预览动效（CSS 近似，正式渲染由 FFmpeg 实现） */
+@keyframes kb-in {
+  from { transform: scale(1); }
+  to { transform: scale(1.12); }
+}
+@keyframes kb-out {
+  from { transform: scale(1.12); }
+  to { transform: scale(1); }
+}
+@keyframes kb-pan {
+  from { transform: translateX(0); }
+  to { transform: translateX(-6%); }
+}
+@keyframes breath {
+  from { transform: translateY(0); }
+  to { transform: translateY(-1.5%); }
+}
+.kb-in { animation: kb-in 4s ease-in-out infinite alternate; }
+.kb-out { animation: kb-out 4s ease-in-out infinite alternate; }
+.kb-pan { animation: kb-pan 4s ease-in-out infinite alternate; }
+.kb-breath { animation: breath 2.6s ease-in-out infinite alternate; }
