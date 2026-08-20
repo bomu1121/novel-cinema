@@ -1,7 +1,11 @@
 # 03 · M0 路线图：单章垂直切片
 
 > **架构变更记录（2026-08-20）**：数据库由 Supabase 切换为本地 SQLite（better-sqlite3），媒体由 R2 切换为本地 `public/storage/`。`src/lib/db.ts` 保持 Supabase 风格链式 API，上层流水线/页面零改动；Postgres 版 schema 保留在 `supabase/migrations/` 作为未来上云路径。
-> **真机联调记录**：SQLite 数据层冒烟通过（多行插入/JSON/upsert/约束错误）；真实端到端通过——上传样章 → DeepSeek 分析（2 人物/1 地点/4 线索/3 风格）→ 签核 A → 改编 16 beats/54.5s（0 红项）→ 签核 B 批准。期间修复两个真实 bug：LLM schema 校验重试次数与错误透出、SQLite 多行 insert 参数展开。
+> **真机联调记录（2026-08-20 终）**：
+> 1. SQLite 数据层冒烟通过；真实端到端通过——上传样章 → DeepSeek 分析（2 人物/1 地点/4 线索/3 风格）→ 签核 A → 改编 16 beats/54.5s（0 红项）→ 签核 B。
+> 2. 火山方舟 Seedream 5.0 Pro 验证通过（t2i + i2i，key 权限实测）；火山豆包 TTS key 独立验证通过（4s mp3）。
+> 3. **完整出片**：签核 C（3 张 phase1 候选点选 → 6 张表情变体）→ 签核 D（17 镜头 / 54.5s）→ 签核 E（8 句配音）→ FFmpeg 渲染 → `out/1a50b162-....mp4`（1920×1080 h264+aac 48kHz，53.6s，烧字幕）。
+> 4. 过程中修复的真实 bug：LLM schema 校验重试与错误透出、SQLite 多行 insert、boolean 绑定、`select("*")`、本地参考图 base64 化、Seedream n=3 只回 1 张、ffmpeg amix 输入标签。
 
 M0 目标：**3000 字、2 个角色、3 分钟成片**，一条最小链路全部跑通。
 非目标：整本导入、夜跑、自动分集、图生视频、LoRA、多用户。

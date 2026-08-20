@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { getSupabaseAdmin } from "@/lib/db";
 import { r2Put, r2PublicUrl, r2SignedUrl } from "@/lib/r2";
 import { getImageProvider, type ImageKind } from "@/lib/providers/image";
@@ -70,6 +72,14 @@ export async function resolveAssetUrl(asset: {
   } catch {
     return null;
   }
+}
+
+/** 把本地 /storage/ 路径转成可被图像 API 引用的 data URL */
+async function toProviderImageUrl(url: string): Promise<string> {
+  if (!url.startsWith("/storage/")) return url;
+  const local = path.join(process.cwd(), "public", "storage", url.slice("/storage/".length));
+  const bytes = readFileSync(local);
+  return `data:image/png;base64,${bytes.toString("base64")}`;
 }
 
 /** A10：从已批准（或最新）脚本推导资产生成清单，按 scene_key 跨章去重 */
@@ -171,7 +181,7 @@ export async function listAssetPlan(bookId: string): Promise<AssetPlan> {
       locationId: null,
       expression: null,
       refAssetIds: [],
-      count: 3,
+      count: 1,
       skipReason: null,
     });
   }
@@ -199,7 +209,7 @@ export async function listAssetPlan(bookId: string): Promise<AssetPlan> {
       locationId: l.id,
       expression: null,
       refAssetIds: [],
-      count: 3,
+      count: 1,
       skipReason: null,
     });
   }
@@ -219,7 +229,7 @@ export async function listAssetPlan(bookId: string): Promise<AssetPlan> {
       locationId: null,
       expression: null,
       refAssetIds: [],
-      count: 3,
+      count: 1,
       skipReason: null,
     });
   }
@@ -256,7 +266,7 @@ export async function listAssetPlan(bookId: string): Promise<AssetPlan> {
         locationId: null,
         expression: emotion,
         refAssetIds: approvedRef ? [approvedRef.id] : [],
-        count: 3,
+        count: 1,
         skipReason: null,
       };
       if (!approvedRef) {
@@ -326,7 +336,7 @@ export async function generateAssetPhase(
           .single();
         if (refRow) {
           const url = await resolveAssetUrl(refRow);
-          if (url) refUrls.push(url);
+          if (url) refUrls.push(await toProviderImageUrl(url));
         }
       }
 
@@ -353,7 +363,7 @@ export async function generateAssetPhase(
           }
         }
 
-        await supabase.from("assets").insert({
+        const { error: assetInsertError } = await supabase.from("assets").insert({
           book_id: bookId,
           kind: spec.kind,
           title: spec.characterName
@@ -379,6 +389,10 @@ export async function generateAssetPhase(
           status: "candidate",
           is_candidate: true,
         });
+        if (assetInsertError) {
+          errors.push(`${spec.sceneKey}: 资产落库失败 ${assetInsertError.message}`);
+          continue;
+        }
         generated += 1;
       }
 
@@ -451,3 +465,4 @@ export async function listAssetsWithUrls(bookId: string) {
   );
   return withUrls;
 }
+

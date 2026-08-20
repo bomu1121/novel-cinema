@@ -109,6 +109,51 @@ describe("SQLite 数据层", () => {
     expect(rows[0].summary).toBe("第二版");
   });
 
+  it("select('*') 返回全列（回归：* 被误判为非法列名）", async () => {
+    const s = getSupabaseAdmin();
+    const bookId = await makeBook();
+    const { data, error } = await s
+      .from("books")
+      .select("*")
+      .eq("id", bookId)
+      .maybeSingle();
+    expect(error).toBeNull();
+    expect(data.title).toContain("db-test");
+  });
+
+  it("boolean 自动转 0/1（回归：better-sqlite3 不接受 boolean）", async () => {
+    const s = getSupabaseAdmin();
+    const bookId = await makeBook();
+
+    const { data: asset, error } = await s
+      .from("assets")
+      .insert({
+        book_id: bookId,
+        kind: "character_ref",
+        params: {},
+        ref_asset_ids: [],
+        source: "generated",
+        status: "candidate",
+        is_candidate: true,
+      })
+      .select("id, is_candidate")
+      .single();
+    expect(error).toBeNull();
+    expect(asset.is_candidate).toBe(1);
+
+    const { error: clueError } = await s.from("clues").insert({
+      book_id: bookId,
+      name: "测试线索",
+      clue_type: "other",
+      description: "x",
+      is_red_herring: true,
+      is_spoiler: false,
+      related_character_ids: [],
+      related_item_ids: [],
+    });
+    expect(clueError).toBeNull();
+  });
+
   it("约束冲突以 {error} 返回而不是抛异常", async () => {
     const s = getSupabaseAdmin();
     const bookId = await makeBook();

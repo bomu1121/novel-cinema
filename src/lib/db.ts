@@ -35,7 +35,9 @@ function encodeRow(table: string, row: Record<string, any>): Record<string, any>
   if (!out.id) out.id = randomUUID();
   if (!out.created_at && !row.created_at) out.created_at = new Date().toISOString();
   for (const [key, value] of Object.entries(out)) {
-    if (value != null && JSON_COLUMNS.has(key) && typeof value !== "string") {
+    if (typeof value === "boolean") {
+      out[key] = value ? 1 : 0; // better-sqlite3 不接受 boolean，统一转 0/1
+    } else if (value != null && JSON_COLUMNS.has(key) && typeof value !== "string") {
       out[key] = JSON.stringify(value);
     }
   }
@@ -67,7 +69,8 @@ function ident(name: string): string {
 }
 
 function colList(columns?: string): string {
-  return columns ? columns.split(",").map((c) => ident(c.trim())).join(", ") : "*";
+  if (!columns || columns.trim() === "*") return "*";
+  return columns.split(",").map((c) => ident(c.trim())).join(", ");
 }
 
 interface WhereClause {
@@ -226,7 +229,12 @@ class QueryBuilder {
         const params: any[] = [];
         const entries = Object.entries(this.updateObj);
         const sets = entries.map(([key, value]) => {
-          const v = value != null && JSON_COLUMNS.has(key) && typeof value !== "string" ? JSON.stringify(value) : value;
+          const v =
+            typeof value === "boolean"
+              ? value ? 1 : 0
+              : value != null && JSON_COLUMNS.has(key) && typeof value !== "string"
+                ? JSON.stringify(value)
+                : value;
           params.push(v);
           return `${ident(key)} = ?`;
         });

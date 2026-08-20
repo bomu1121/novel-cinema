@@ -198,7 +198,7 @@ async function main() {
         filters.push(`[${i}:a]adelay=${delayMs}|${delayMs},volume=${spec.audio_tracks[i].volume}[a${i}]`);
       }
       filters.push(
-        `[${[...Array(audioUrls.length).keys()].map((i) => `a${i}`).join("")}]amix=inputs=${audioUrls.length}:normalize=0,loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000[aout]`,
+        `[${[...Array(audioUrls.length).keys()].map((i) => `a${i}`).join("][")}]amix=inputs=${audioUrls.length}:normalize=0,loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000[aout]`,
       );
       const audioArgs = ["-y"];
       for (const url of audioUrls) audioArgs.push("-i", url);
