@@ -39,7 +39,9 @@ create type take_status as enum ('draft','accepted','rejected');
 
 create table books (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null references auth.users(id),
+  -- M0 单人自用阶段不接 auth：先不挂 FK，由 service_role 写入。
+  -- 接入登录后补：references auth.users(id)
+  owner_id uuid not null,
   title text not null,
   source_file_key text,
   source_file_name text,
