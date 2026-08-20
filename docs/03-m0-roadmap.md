@@ -90,32 +90,23 @@ novel-cinema/
 
 ### T3 · LLM 适配器（0.5 天）
 
-- [ ] `providers/llm.ts` 接口：
+- [x] `providers/llm.ts`：`completeJSON<T>`（OpenAI 兼容 + zod JSON Schema 注入 + 校验失败反馈重试 + `response_format` 降级 + 退避）+ `completeText`
+- [x] 成本留痕：调用结果写入 `jobs`（book_id/node/tokens/model/attempts），DB 未配置时不打断主流程
+- [x] 单元测试：代码块围栏解析、校验失败反馈重试、重试耗尽抛 LLMError（3 例）
+- [ ] 真实 provider 联调：填入 LLM_* 后跑一次 analyze 验证
 
-```ts
-interface LLMClient {
-  completeJSON<T>(opts: {
-    system: string; prompt: string;
-    schema: ZodType<T>; temperature?: number;
-    job: JobHandle;               // 成本/重试记账
-  }): Promise<T>;
-}
-```
-
-- [ ] 实现一个 provider（OpenAI 兼容 base_url 即可通吃 DeepSeek/Qwen/GLM 等）
-- [ ] zod 校验失败时把校验错误拼回 prompt 重试（最多 3 次）
-- [ ] `jobs` 成本记账（tokens + cost + 耗时）
-
-**DoD**：用“输出字段类型错误”的测试 prompt 验证自动修复重试；jobs 记录完整。
+**DoD**：用“输出字段类型错误”的测试 prompt 验证自动修复重试；jobs 记录完整。（当前：代码与 mock 测试完成）
 
 ### T4 · 单章分析（1 天）
 
-- [ ] `node: analyze`：对单章跑 B22 抽取（角色/事件/地点/物品/线索/摘要/基调）
-- [ ] `node: bible.propose`：输出 1~3 套风格圣经候选（M0 只要求 1 套可用）
-- [ ] 档案页（bible）：人物卡片（名字/别名/描述）、风格圣经卡、线索列表，均可编辑保存
-- [ ] 签核 A 简版：点“批准”落 `approved` 状态
+- [x] `schemas/analysis.ts`：chunkAnalysis + styleBibleProposals 的 zod schema
+- [x] `prompts/analyze.ts`：块抽取与风格圣经候选的提示词模板
+- [x] `nodes/analyze.ts`：analyzeChapter / persistChapterAnalysis（人物别名合并、地点/物品去重、线索覆盖、时间线幂等）/ proposeStyleBibles / approveStyleBible
+- [x] API：`POST /api/books/[bookId]/analyze`、`GET .../bible`、`POST .../bible/approve`
+- [x] 档案页（`/books/[bookId]/bible`）：摘要/人物/线索/时间线展示 + 风格圣经候选点选批准（签核 A 简版）
+- [ ] 真实章节验证：LLM key 配好后，用 3000 字样本章跑通并人工核对人物无张冠李戴
 
-**DoD**：3000 字样本章输出 2+ 人物且人工核对无张冠李戴；风格圣经可直接用于出图 prompt。
+**DoD**：3000 字样本章输出 2+ 人物且人工核对无张冠李戴；风格圣经可直接用于出图 prompt。（当前：代码完成，待真实模型验证）
 
 ### T5 · 章节改编 + 审校台（2 天，全 M0 最关键）
 
