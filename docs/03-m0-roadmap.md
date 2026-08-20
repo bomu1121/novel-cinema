@@ -168,13 +168,13 @@ novel-cinema/
 
 ### T10 · 端到端联调 + 成本报告（1 天）
 
-- [ ] `scripts/pipeline-local.ts`：单章一键全链路（clean → analyze → adapt → assets → storyboard → voice → render）
-- [ ] 每个签核点在脚本中以 `--approve-all` 跳过人工（方便回归）
-- [ ] 成本汇总页/命令：按节点统计 tokens/cost/时长
-- [ ] 用 2 个不同文本跑 2 遍，修复明显 bug
-- [ ] 写 `README.md`：启动、环境变量、一条命令出片
+- [x] `scripts/pipeline-local.ts`：单章一键流水线（分析 → 批准风格 → 改编 → 批准脚本 → 资产 phase1/phase2 → 分镜 → 配音 → 渲染），`--approve-all / --skip-assets / --skip-voice` 开关；资产签核后重跑自动续跑下一阶段
+- [x] `scripts/cost-report.ts`：按节点汇总 jobs（调用数/失败数/输入输出 tokens/模型），`npm run cost:report -- --book <id>`
+- [x] README 一键复现命令
+- [ ] 两个样本章真实全链出片（需要 Supabase + R2 + 图像 + TTS 全部 key）
+- [ ] 成本数字实测与 README 记录
 
-**DoD**：两个样本章各出片成功；单章全链路成本有明确数字；README 可复现。
+**DoD**：两个样本章各出片成功；单章全链路成本有明确数字；README 可复现。（当前：代码完成，真机待全 key）
 
 ## 4. 排期建议（个人开发者）
 
