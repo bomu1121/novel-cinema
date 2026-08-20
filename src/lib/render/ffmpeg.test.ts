@@ -38,6 +38,27 @@ describe("buildShotGraph", () => {
     expect(graph.filterComplex).toContain("[outv]");
   });
 
+  it("slide 入场/退场生成位移动画表达式", () => {
+    const graph = buildShotGraph(
+      track({
+        camera: "static",
+        layers: [
+          {
+            kind: "character",
+            asset_url: "char.png",
+            rect: { x: 0.5, y: 0.45, w: 0.3, h: 0.5 },
+            enter: "slide_left",
+            exit: "slide_right",
+            motion: {},
+          },
+        ],
+      }),
+      { width: 1920, height: 1080, fps: 25 },
+    );
+    expect(graph.filterComplex).toContain("if(lt(t,0.4)");
+    expect(graph.filterComplex).toContain("gte(t,3.60)");
+  });
+
   it("黑场 + 文字卡 + 无背景", () => {
     const graph = buildShotGraph(
       track({

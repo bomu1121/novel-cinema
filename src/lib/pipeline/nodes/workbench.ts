@@ -43,6 +43,7 @@ export async function getWorkbench(bookId: string) {
   let beats: any[] = [];
   let shots: unknown[] = [];
   let layers: unknown[] = [];
+  let voiceTakes: unknown[] = [];
   if (adaptedRes.data) {
     const { data: beatRows } = await s
       .from("beats")
@@ -52,6 +53,10 @@ export async function getWorkbench(bookId: string) {
     beats = (beatRows ?? []) as any[];
     const beatIds = beats.map((b: { id: string }) => b.id);
     if (beatIds.length > 0) {
+      const [takeRes] = await Promise.all([
+        s.from("voice_takes").select("id, beat_id, voice_profile_id, status, asr_confidence, error, duration_ms").in("beat_id", beatIds),
+      ]);
+      voiceTakes = takeRes.data ?? [];
       const shotRows = await s.from("shots").select("id").in("beat_id", beatIds);
       const shotIds = (shotRows.data ?? []).map((r: { id: string }) => r.id);
       const [shotRes, layerRes] = await Promise.all([
@@ -82,6 +87,7 @@ export async function getWorkbench(bookId: string) {
     beats,
     shots,
     layers,
+    voiceTakes,
     assets: assetsWithUrls,
     voiceProfiles: profilesRes.data ?? [],
     timeline: timelineRes.data,

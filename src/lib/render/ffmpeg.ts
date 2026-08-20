@@ -102,15 +102,50 @@ export function buildShotGraph(
 
     if (!layer.asset_url) continue;
     const { w, h, cx, cy } = rectPx(layer.rect, W, H);
-    const fadeIn = layer.enter === "fade_in" ? `fade=t=in:st=0:d=0.3,` : "";
-    const fadeOut = layer.exit === "fade_out" ? `fade=t=out:st=${Math.max(0, dur - 0.3).toFixed(2)}:d=0.3,` : "";
+    const fadeIn = layer.enter === "fade_in" ? `fade=t=in:st=0:d=0.4,` : "";
+    const fadeOut = layer.exit === "fade_out" ? `fade=t=out:st=${Math.max(0, dur - 0.4).toFixed(2)}:d=0.4,` : "";
     const outLabel = `l${fileInputIndex}`;
     parts.push(
       `[${fileInputIndex}:v]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},${fadeIn}${fadeOut}format=rgba[${outLabel}]`,
     );
 
-    const xExpr = `(${cx.toFixed(0)}-w/2)`;
-    let yExpr = `(${cy.toFixed(0)}-h/2)`;
+    // 入场/出场位移动画（slide_*）：前/后 0.4s 内从画布外滑入/滑出
+    const targetX = cx - w / 2;
+    const targetY = cy - h / 2;
+    const enterDur = 0.4;
+    const exitDur = 0.4;
+    const exitStart = Math.max(enterDur, dur - exitDur);
+
+    const enterFrom: Record<string, { x: number; y: number }> = {
+      slide_left: { x: -w, y: targetY },
+      slide_right: { x: W, y: targetY },
+      slide_up: { x: targetX, y: H },
+      slide_down: { x: targetX, y: -h },
+    };
+    const exitTo: Record<string, { x: number; y: number }> = {
+      slide_left: { x: -w, y: targetY },
+      slide_right: { x: W, y: targetY },
+      slide_up: { x: targetX, y: -h },
+      slide_down: { x: targetX, y: H },
+    };
+
+    const enter = layer.enter ?? "none";
+    const exit = layer.exit ?? "none";
+    const from = enterFrom[enter];
+    const to = exitTo[exit];
+
+    let xExpr = targetX.toFixed(1);
+    let yExpr = targetY.toFixed(1);
+
+    if (from) {
+      xExpr = `if(lt(t,${enterDur}),${from.x.toFixed(1)}+(${targetX.toFixed(1)}-${from.x.toFixed(1)})*(t/${enterDur}),${xExpr})`;
+      yExpr = `if(lt(t,${enterDur}),${from.y.toFixed(1)}+(${targetY.toFixed(1)}-${from.y.toFixed(1)})*(t/${enterDur}),${yExpr})`;
+    }
+    if (to) {
+      xExpr = `if(gte(t,${exitStart.toFixed(2)}),${targetX.toFixed(1)}+(${to.x.toFixed(1)}-${targetX.toFixed(1)})*((t-${exitStart.toFixed(2)})/${exitDur}),${xExpr})`;
+      yExpr = `if(gte(t,${exitStart.toFixed(2)}),${targetY.toFixed(1)}+(${to.y.toFixed(1)}-${targetY.toFixed(1)})*((t-${exitStart.toFixed(2)})/${exitDur}),${yExpr})`;
+    }
+
     if (layer.motion?.type === "breath") {
       yExpr = `${yExpr}+${Math.round(H * 0.004)}*sin(2*PI*t/2.6)`;
     }

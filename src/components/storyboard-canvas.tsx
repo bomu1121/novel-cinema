@@ -26,6 +26,7 @@ interface CanvasData {
   layers?: any[];
   assets?: any[];
   characters?: any[];
+  voiceTakes?: any[];
   timeline?: any;
 }
 
@@ -45,6 +46,7 @@ function StoryboardCanvas() {
   const [data, setData] = useState<CanvasData>({});
   const [error, setError] = useState<string | null>(null);
   const [selectedShotId, setSelectedShotId] = useState<string | null>(null);
+  const [selectedBeatId, setSelectedBeatId] = useState<string | null>(null);
   const [edits, setEdits] = useState<Record<string, Record<string, unknown>>>({});
 
   const load = useCallback(async () => {
@@ -70,6 +72,10 @@ function StoryboardCanvas() {
 
   const assetsById = useMemo(() => new Map((data.assets ?? []).map((a: any) => [a.id, a])), [data.assets]);
   const charactersById = useMemo(() => new Map((data.characters ?? []).map((c: any) => [c.id, c])), [data.characters]);
+  const takeByBeat = useMemo(
+    () => new Map((data.voiceTakes ?? []).map((t: any) => [t.beat_id, t])),
+    [data.voiceTakes],
+  );
 
   const { nodes, edges } = useMemo(() => {
     const beats = data.beats ?? [];
@@ -95,17 +101,26 @@ function StoryboardCanvas() {
       const beatW = Math.max(150, Number(beat.estimated_duration_sec || 2) * PX_PER_SEC);
       const beatId = `beat-${beat.id}`;
       const char = beat.character_id ? charactersById.get(beat.character_id) : null;
+      const take = takeByBeat.get(beat.id);
       nodes.push({
         id: beatId,
         type: "beatNode",
         position: { x: cursor, y: 40 },
         data: {
+          beatId: beat.id,
           idx: beat.idx,
           type: beat.type,
           speaker: char?.canonical_name ?? "旁白",
           text: beat.text,
           status: beat.status,
           duration: beat.estimated_duration_sec,
+          voice: take
+            ? {
+                status: take.status,
+                asr: take.asr_confidence,
+                error: Boolean(take.error),
+              }
+            : null,
         },
         style: { width: beatW, height: 86 },
       });
@@ -146,10 +161,27 @@ function StoryboardCanvas() {
       cursor += beatW + 18;
     });
     return { nodes, edges };
-  }, [data, assetsById, charactersById]);
+  }, [data, assetsById, charactersById, takeByBeat]);
 
   const selectedShot = data.shots?.find((s: any) => s.id === selectedShotId);
   const selectedLayers = (data.layers ?? []).filter((l: any) => l.shot_id === selectedShotId);
+  const selectedBeat = data.beats?.find((b: any) => b.id === selectedBeatId);
+  const selectedTake = takeByBeat.get(selectedBeatId ?? "");
+
+  async function patchBeat(beatId: string, patch: Record<string, unknown>) {
+    try {
+      const res = await fetch(`/api/books/${bookId}/workbench/beats/${beatId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ patch }),
+      });
+      const json = await res.json();
+      if (!res.ok) setError(json.error ?? "保存失败");
+      else await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
 
   async function patchShot(shotId: string, patch: Record<string, unknown>) {
     try {
@@ -276,7 +308,18 @@ function StoryboardCanvas() {
           nodes={nodes}
           edges={edges}
           nodeTypes={{ beatNode: BeatNode, shotNode: ShotNode }}
-          onNodeClick={(_, n) => setSelectedShotId(n.type === "shotNode" ? String(n.data?.shotId) : null)}
+          onNodeClick={(_, n) => {
+            if (n.type === "shotNode") {
+              setSelectedShotId(String(n.data?.shotId));
+              setSelectedBeatId(null);
+            } else if (n.type === "beatNode") {
+              setSelectedBeatId(String(n.data?.beatId));
+              setSelectedShotId(null);
+            } else {
+              setSelectedShotId(null);
+              setSelectedBeatId(null);
+            }
+          }}
           fitView
           minZoom={0.2}
         >
@@ -294,8 +337,71 @@ function StoryboardCanvas() {
 
       {/* 右侧检查器 */}
       <aside className="flex w-80 shrink-0 flex-col gap-3 overflow-y-auto border-l border-zinc-300 bg-white p-4 text-xs">
-        <h2 className="text-sm font-bold">镜头检查器</h2>
-        {!selectedShot && <p className="text-zinc-400">点击画布上的镜头卡片开始编辑。</p>}
+        <h2 className="text-sm font-bold">检查器</h2>
+        {!selectedShot && !selectedBeat && (
+          <p className="text-zinc-400">点击上方 beat 卡片改说话人/台词；点击镜头卡片改画面。</p>
+        )}
+
+        {selectedBeat && (
+          <div className="rounded-lg border p-2">
+            <p className="font-semibold">beat #{selectedBeat.idx} · {selectedBeat.type}</p>
+            <label className="mt-1 block">说话人
+              <select
+                value={String(cur(`beat:${selectedBeat.id}`, selectedBeat, "character_id") ?? "")}
+                onChange={(e) =>
+                  edit(`beat:${selectedBeat.id}`, "character_id", e.target.value || null)
+                }
+                className="mt-0.5 w-full rounded border px-2 py-1"
+              >
+                <option value="">旁白</option>
+                {(data.characters ?? []).map((c: any) => (
+                  <option key={c.id} value={c.id}>{c.canonical_name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="mt-1 block">台词 / 旁白稿
+              <textarea
+                value={String(cur(`beat:${selectedBeat.id}`, selectedBeat, "text") ?? "")}
+                onChange={(e) => edit(`beat:${selectedBeat.id}`, "text", e.target.value)}
+                rows={3}
+                className="mt-0.5 w-full rounded border px-2 py-1.5"
+              />
+            </label>
+            <div className="mt-1 grid grid-cols-2 gap-1">
+              <label>情绪
+                <select
+                  value={String(cur(`beat:${selectedBeat.id}`, selectedBeat, "emotion") ?? "neutral")}
+                  onChange={(e) => edit(`beat:${selectedBeat.id}`, "emotion", e.target.value)}
+                  className="mt-0.5 w-full rounded border px-1 py-1"
+                >
+                  {["neutral", "calm", "happy", "sad", "angry", "fear", "surprise", "suspicious", "nervous", "pain", "determined", "whisper"].map((e) => (
+                    <option key={e} value={e}>{e}</option>
+                  ))}
+                </select>
+              </label>
+              <label>语速
+                <input
+                  type="number" step={0.05} min={0.8} max={1.3}
+                  value={Number(cur(`beat:${selectedBeat.id}`, selectedBeat, "pace") ?? 1)}
+                  onChange={(e) => edit(`beat:${selectedBeat.id}`, "pace", Number(e.target.value))}
+                  className="mt-0.5 w-full rounded border px-1 py-1"
+                />
+              </label>
+            </div>
+            <button
+              onClick={() => patchBeat(selectedBeat.id, edits[`beat:${selectedBeat.id}`] ?? {})}
+              className="mt-2 w-full rounded-lg bg-zinc-900 py-1.5 text-white"
+            >
+              保存 beat（改人后记得重跑配音）
+            </button>
+            <p className="mt-2 text-[10px] text-zinc-500">
+              配音：{selectedTake ? `${selectedTake.status}` : "未合成"}
+              {selectedTake?.asr_confidence != null ? ` · ASR ${Math.round(selectedTake.asr_confidence * 100)}%` : ""}
+              {selectedTake?.error ? " · 有红项" : ""}
+            </p>
+          </div>
+        )}
+
         {selectedShot && (
           <>
             <div className="rounded-lg border p-2">
@@ -399,6 +505,15 @@ function BeatNode({ data }: any) {
     <div className={`h-full w-full rounded-xl border-2 bg-white p-2 shadow-sm ${data.status === "stale" ? "border-red-400" : "border-zinc-200"}`}>
       <p className="text-[11px] font-bold">
         #{data.idx} {data.type} · {data.speaker} · {Number(data.duration).toFixed(1)}s
+        {data.voice ? (
+          <span
+            className={`ml-1 rounded px-1 text-[9px] ${
+              data.voice.error ? "bg-red-100 text-red-600" : data.voice.status === "accepted" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+            }`}
+          >
+            {data.voice.status === "accepted" ? "🔊" : data.voice.error ? "🔊⚠" : "🔊…"}
+          </span>
+        ) : null}
       </p>
       <p className="mt-1 line-clamp-2 text-[11px] text-zinc-600">{data.text}</p>
     </div>
