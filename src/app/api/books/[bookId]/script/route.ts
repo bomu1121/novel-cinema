@@ -10,7 +10,8 @@ export async function GET(
     const script = await getLatestScript(bookId);
     return NextResponse.json(script);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = (err as { message?: string })?.message ?? (err instanceof Error ? err.message : String(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+

@@ -12,7 +12,8 @@ export async function POST(
     const result = await generateAssetPhase(bookId, phase);
     return NextResponse.json(result);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = (err as { message?: string })?.message ?? (err instanceof Error ? err.message : String(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+

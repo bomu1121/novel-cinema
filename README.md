@@ -6,14 +6,16 @@
 
 ## 文档
 
-- [docs/00-decisions.md](docs/00-decisions.md) — 产品与技术决策基线
+- [docs/00-decisions.md](docs/00-decisions.md) — 产品与技术决策基线（含 SQLite 本地化决策）
 - [docs/01-data-model-v0.md](docs/01-data-model-v0.md) — 数据模型 v0
 - [docs/02-pipeline-v0.md](docs/02-pipeline-v0.md) — 流水线定义 v0（节点/提示词/校验/重试）
 - [docs/03-m0-roadmap.md](docs/03-m0-roadmap.md) — M0 任务拆分与验收标准
 
-## 技术栈
+## 技术栈（本地单机版）
 
-Next.js 16 (App Router) + TypeScript + Supabase (Postgres + pgvector) + Cloudflare R2 + 托管队列（M1 接入）+ FFmpeg 渲染。
+Next.js 16 (App Router) + TypeScript + **SQLite（better-sqlite3，自动建表）** + **本地媒体目录 public/storage/** + FFmpeg 本地渲染。
+
+> 云端 Postgres 版 schema 保留在 `supabase/migrations/0001_schema.sql`，未来要上云/多用户时可直接迁移回去。
 
 ## 环境变量
 
@@ -21,47 +23,35 @@ Next.js 16 (App Router) + TypeScript + Supabase (Postgres + pgvector) + Cloudfla
 cp .env.example .env.local
 ```
 
-必填（按当前进度逐步使用）：`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`，`R2_*`，`LLM_*`。其余到对应 M0 节点再填。
+只需 3 个 AI key：`LLM_*`（已有 DeepSeek）、`IMAGE_API_KEY`（即梦/Seedream）、`TTS_API_KEY`（火山豆包）。数据库和文件**零配置**，首次启动自动创建 `data/novel-cinema.db`。
 
-## 数据库迁移
+## 数据与媒体
 
-Schema 在 [supabase/migrations/0001_schema.sql](supabase/migrations/0001_schema.sql)。
-
-```bash
-# 使用 Supabase CLI
-npx supabase db push
-
-# 或本地 Supabase stack
-npx supabase start
-npx supabase db reset
-```
-
-> 迁移文件启用了 RLS 并引用 `auth.users`，因此目标是 Supabase 环境，不是裸 Postgres。
+- 数据库：`data/novel-cinema.db`（SQLite，WAL 模式，备份=复制文件）
+- 媒体：`public/storage/`（图片/音频/成片，URL 为 `/storage/<key>`）
+- 两者均已加入 .gitignore，不会误提交
 
 ## 开发
 
 ```bash
-npm run dev     # http://localhost:3000
+npm run dev            # http://localhost:3000
 npm run lint
+npm test               # 29 个单测
 npm run build
+
+# 一键流水线（单章）
+npm run pipeline:local -- --book <bookId> --approve-all
+
+# 本地渲染
+npm run render:local -- --book <bookId>
+
+# 成本报告
+npm run cost:report -- --book <bookId>
 ```
 
 ## M0 进度
 
-- [x] T0 脚手架 + 依赖 + env/DB/R2 基础封装
-- [x] T1 Schema v0 迁移文件
-- [x] T2 上传 + 清洗切章（代码 + 10 个单测全过；待真实环境验证）
-- [x] T3 LLM 适配器（OpenAI 兼容 + zod 校验重试 + 成本留痕；3 个 mock 测试全过）
-- [x] T4 单章分析 + 全书档案页 + 风格圣经签核 A（待真实 LLM 联调）
-- [x] T5 章节改编 + 审校台 + AI 自检（真实 DeepSeek 冒烟通过）
-- [x] T6 图像适配器（Seedream）+ 资产生成清单 + 资产库签核 C（待真实图像 key 联调）
-- [x] T7 分镜生成 + 时间轴预览 + 签核 D（确定性，待真实资产联调）
-- [x] T8 配音 + ASR + 签核 E（火山豆包 TTS，待真实 TTS key 联调）
-- [x] T9 本地渲染（FFmpeg 真机验证通过：镜头→拼接→混音→烧字幕）
-- [x] T10 一键流水线 + 成本报告（待全 key 后做两样本真机全链出片）
-
-## M0 完成度
-
-**代码全部完成**：T0–T10 全链路（上传清洗 → 全书档案/签核A → 改编审校/签核B → 资产生成/签核C → 分镜/签核D → 配音/签核E → 渲染/签核F）。
-已验证：29 个单测、真实 DeepSeek 改编冒烟、真实 FFmpeg 渲染（2 镜头+音轨+烧字幕）。
-待真机联调：Supabase / R2 / 图像 / TTS 四个外部 key。
+- [x] T0–T10 代码全部完成
+- [x] 数据库切换为本地 SQLite（Supabase 风格链式 API，上层零改动，冒烟通过）
+- [x] 真实 DeepSeek 改编冒烟通过；真实 FFmpeg 渲染通过（1920×1080 h264+aac + 烧字幕）
+- [ ] 真机全链：上传样章 → 签核 A/B（本周联调）；图像/TTS key 到位后跑签核 C–F

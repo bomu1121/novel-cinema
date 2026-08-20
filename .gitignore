@@ -17,6 +17,10 @@
 /.next/
 /out/
 
+# local data & media (SQLite + generated assets)
+/data/
+/public/storage/
+
 # local render test fixtures
 /.test-assets/
 

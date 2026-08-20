@@ -10,12 +10,13 @@ export async function GET(
     const [assets, plan] = await Promise.all([
       listAssetsWithUrls(bookId),
       listAssetPlan(bookId).catch((err) => ({
-        error: err instanceof Error ? err.message : String(err),
+        error: (err as { message?: string })?.message ?? (err instanceof Error ? err.message : String(err)),
       })),
     ]);
     return NextResponse.json({ assets, plan });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = (err as { message?: string })?.message ?? (err instanceof Error ? err.message : String(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+

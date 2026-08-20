@@ -47,6 +47,9 @@ async function localize(url: string | null, dir: string, index: number, kind: st
     if (/^\/[A-Za-z]:/.test(local)) local = local.slice(1); // Windows: /D:/... → D:/...
     return local;
   }
+  if (url.startsWith("/storage/")) {
+    return resolve(process.cwd(), "public", "storage", url.slice("/storage/".length));
+  }
   if (/^[A-Za-z]:[\\/]/.test(url) || url.startsWith("/")) return url;
 
   const ext = kind === "audio" ? ".mp3" : ".png";

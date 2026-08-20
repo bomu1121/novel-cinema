@@ -247,7 +247,7 @@ export async function runAdaptation(
       maxTokens: 8000,
       bookId,
       node: "adapt.chapter",
-      maxAttempts: 2,
+      maxAttempts: 3,
     });
 
     const errors = validateAdaptation(input, result.data);

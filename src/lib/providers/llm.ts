@@ -237,7 +237,11 @@ export async function completeJSON<T>(opts: CompleteJSONOptions<T>): Promise<LLM
   }
 
   await logJob(opts.bookId, opts.node, "failed", null, maxAttempts, new Error(lastIssue));
-  throw new LLMError(`LLM 结构化输出在 ${maxAttempts} 次尝试后仍未通过校验`, maxAttempts, lastIssue);
+  throw new LLMError(
+    `LLM 结构化输出在 ${maxAttempts} 次尝试后仍未通过校验：${lastIssue}`,
+    maxAttempts,
+    lastIssue,
+  );
 }
 
 /** 非结构化文本补全（自检、重写等场景） */

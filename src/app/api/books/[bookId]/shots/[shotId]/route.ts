@@ -17,7 +17,8 @@ export async function PATCH(
     await updateShot(shotId, body);
     return NextResponse.json({ ok: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = (err as { message?: string })?.message ?? (err instanceof Error ? err.message : String(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+

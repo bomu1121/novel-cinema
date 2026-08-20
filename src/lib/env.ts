@@ -5,19 +5,6 @@ import { z } from "zod";
  * 只有在这里声明的变量才允许被服务端代码读取，避免拼错 key 静默失败。
  */
 const envSchema = z.object({
-  // Supabase
-  DATABASE_URL: z.string().optional(),
-  SUPABASE_URL: z.string().optional(),
-  SUPABASE_ANON_KEY: z.string().optional(),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
-
-  // Cloudflare R2
-  R2_ACCOUNT_ID: z.string().optional(),
-  R2_ACCESS_KEY_ID: z.string().optional(),
-  R2_SECRET_ACCESS_KEY: z.string().optional(),
-  R2_BUCKET: z.string().optional(),
-  R2_PUBLIC_URL: z.string().optional(),
-
   // LLM（OpenAI 兼容）
   LLM_API_KEY: z.string().optional(),
   LLM_BASE_URL: z.string().optional(),
@@ -42,6 +29,9 @@ const envSchema = z.object({
   ASR_BASE_URL: z.string().optional(),
   ASR_MODEL: z.string().optional(),
   RENDER_ENDPOINT: z.string().optional(),
+
+  // 本地数据目录（默认 ./data）
+  NOVEL_CINEMA_DATA_DIR: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

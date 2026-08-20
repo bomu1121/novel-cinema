@@ -28,16 +28,19 @@
 
 | 模块 | 方案 |
 |---|---|
-| 应用 | Next.js + TypeScript，单仓库；托管 Vercel/Railway |
-| 数据库 | Supabase Postgres + pgvector（不做独立向量库） |
-| 存储 | Cloudflare R2 或 S3 兼容 |
-| 任务队列 | Inngest / Trigger.dev 托管队列；本地开发提供 `npm run pipeline:local` |
-| 渲染 | FFmpeg/Remotion 作为一次性 Cloud Run / Railway Job，渲染完销毁 |
+| 应用 | Next.js + TypeScript，单仓库；**本地运行（个人单机）** |
+| 数据库 | **SQLite（better-sqlite3，本地文件 data/novel-cinema.db）**。原 Postgres 方案保留在 supabase/migrations/，未来上云可迁移 |
+| 存储 | **本地 public/storage/**；原 R2 接口保留为适配层 |
+| 任务队列 | 本地脚本直跑（M0）；上云时再换 Inngest / Trigger.dev |
+| 渲染 | 本地 FFmpeg（已验证）；上云时迁一次性 Job |
 | LLM | 便宜模型做全书粗读；强模型做章节改编/实体合并/自检；**强制 JSON Schema 输出（zod 校验）** |
 | 图像 | 首选带“角色参考图”的商业 API（即梦/Seedream 一档）；精细控制用 Replicate/FAL 跑 Flux + IP-Adapter |
-| TTS | MiniMax / 火山 / CosyVoice 一档，按角色锁 voice_id，支持情绪/语速 |
-| ASR | Whisper API 回读校验台词 |
+| TTS | 火山豆包 TTS（已实现）；按角色锁 voice_id，支持情绪/语速 |
+| ASR | Whisper 兼容 API 回读校验台词（可暂不配） |
 | 图生视频 | 可灵/即梦/Runway，仅关键 beat |
+
+> **2026-08-20 架构变更**：从 Supabase + R2 切换为 SQLite + 本地文件。
+> 原因：单人单机使用，Supabase 的 auth/RLS/realtime/托管备份全部用不到，反而增加配置成本；本地化后配置只剩 3 个 AI key，备份=复制项目目录。`src/lib/db.ts` 保持了 Supabase 风格链式 API，上层代码零改动。
 
 ## 4. 明确不做（v0）
 

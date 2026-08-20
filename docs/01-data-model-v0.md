@@ -2,6 +2,8 @@
 
 > 目标：一套结构能同时承载“原文 → 全书档案 → 改编脚本 → 分层镜头 → 时间轴 → 渲染/分集”全链路。
 > 原则：AI 只产出 JSON，所有 JSON 进表；渲染器只消费确定性快照；AI 模型信息（prompt/seed/参数）全部留痕。
+>
+> **实现说明（2026-08-20）**：当前实现为本地 SQLite（见 `src/lib/db.ts`，字段与本文一致，枚举/数组/jsonb 用 TEXT+JSON 承载，自动建表）。下方 Postgres DDL 是“上云版”，保留在 `supabase/migrations/0001_schema.sql`。
 
 ## 1. 设计原则
 

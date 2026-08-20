@@ -57,7 +57,8 @@ export async function GET(
       command: `npm run render:local -- --book ${bookId}`,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = (err as { message?: string })?.message ?? (err instanceof Error ? err.message : String(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
