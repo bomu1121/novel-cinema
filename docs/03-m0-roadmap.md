@@ -110,14 +110,15 @@ novel-cinema/
 
 ### T5 · 章节改编 + 审校台（2 天，全 M0 最关键）
 
-- [ ] `schemas/adapt.ts`：完整 zod schema（beats/selection_report，与 docs/02 附录一致）
-- [ ] `node: adapt`：上下文包组装（原文 + 风格圣经 + 人物白名单 + 时长预算）+ C10 prompt
-- [ ] 确定性校验器：source_span 回查原文、人物白名单、时长预算 ±10%、情绪枚举
-- [ ] `node: review.script`：AI 自检（忠实度/线索/剧透/节奏），输出红黄项
-- [ ] **审校台页面**：左侧原文高亮 span，右侧 beat 卡片列表；可编辑 text/emotion/pace/visual_note；可删 beat；可对单个 beat “带修复指令重生成”；红黄项 badge
-- [ ] 签核 B：批准整章 / 打回重跑
+- [x] `schemas/adapt.ts`：完整 zod schema（beats/selection_report/review，与 docs/02 附录一致）
+- [x] `node: adapt`：上下文包组装（原文 + 风格圣经 + 人物白名单 + 线索 + 时长预算）+ C10 prompt
+- [x] 确定性校验器：source_span 回查原文、人物白名单、时长预算 ±10%、旁白长度（4 个单测）
+- [x] `node: review.script`：AI 自检（忠实度/线索/剧透/节奏/声部），红黄项输出
+- [x] 审校台页面（`/books/[bookId]/script`）：beat 卡片编辑（文本/画面/情绪/语速）+ 原文出处内联展示 + 红黄项高亮 + 批准整章（签核 B）
+- [x] **真实 LLM 冒烟测试**：deepseek-chat 产出 8 beats / 26.8s，通过全部确定性校验（首次输出 schema 失败后被自动修复重试，attempts=2）
+- [ ] 打磨：左侧原文高亮 span 与右侧 beat 的分栏联动（当前为出处内联展示）；单 beat 带修复指令重生成
 
-**DoD**：3000 字 → 180s 内脚本；每 beat 可回原文定位；红黄项界面可见；编辑保存后不丢。
+**DoD**：3000 字 → 180s 内脚本；每 beat 可回原文定位；红黄项界面可见；编辑保存后不丢。（当前：核心链路完成并过真实模型冒烟；分栏联动与单 beat 重生成留作打磨）
 
 ### T6 · 图像适配器 + 资产库（1.5 天）
 

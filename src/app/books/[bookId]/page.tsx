@@ -66,12 +66,20 @@ export default function BookDetailPage() {
         <header>
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold">{book.title}</h1>
-            <Link
-              href={`/books/${bookId}/bible`}
-              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:border-zinc-900"
-            >
-              全书档案 / 签核 A →
-            </Link>
+            <div className="flex gap-2">
+              <Link
+                href={`/books/${bookId}/bible`}
+                className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:border-zinc-900"
+              >
+                全书档案 / 签核 A →
+              </Link>
+              <Link
+                href={`/books/${bookId}/script`}
+                className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm hover:border-zinc-900"
+              >
+                改编脚本 / 签核 B →
+              </Link>
+            </div>
           </div>
           <p className="mt-1 text-sm text-zinc-500">
             {book.total_chars.toLocaleString()} 字 · {chapters.length} 章 · 状态 {book.status}
