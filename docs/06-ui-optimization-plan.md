@@ -1170,3 +1170,13 @@ Playwright e2e（整页 axe / reduced-motion 冒烟 / 视觉回归基线）· DA
 - 收件箱（workbench）与 script 页自检区都会展示该诊断（script 页以「【改编校验失败】」只读样式呈现，不假装可定位 beat）；
 - 用户不再面对一句红字：能看见失败原因、建议，并可从 workbench 时间机器/收件箱处置后重跑；
 - 单测：`review.test.ts` 2 例（诊断写入 + 空错误兜底）。门禁全绿：tsc/eslint/lint:ui 0 错、vitest 74 通过、`next build` 成功。
+
+### 计划内收尾项（已落地，第三批）
+
+| 项 | 实现 |
+|---|---|
+| StatusBadge「影响 N」溯源 | `downstreamImpact` 补齐 adapted_chapters/beats（含 voice_takes）/timelines（含 render_jobs）分支 + `GET /impact` + `<ImpactPill>`（stale 时显示「影响 N」，点击展开明细浮层）；接入 script 页章节徽章与 workbench 时间线徽章；单测 3 例 |
+| CandidateGallery（资产对比） | 资产候选卡加「对比」按钮（选中高亮 ring + hover 放大），选两张出现**吸底并排对比条**（各自信息/批准按钮/hover 放大/选第 3 张替换最早项/关闭）；bible 风格方案左右对比此前已在 P3 落地 |
+| 视觉回归基线 | `scripts/seed-fixture.ts`（确定性 fixture-book，幂等重建）→ `e2e/visual.spec.ts`（7 路由 × desktop/mobile 双视口 `toHaveScreenshot`，动画禁用 + networkidle 稳定），**14 张基线已生成且可复现**；playwright webServer 自动 `seed:fixture` 前置 |
+
+验证：vitest **77** 通过（+graph 3 例）/ vitest:ui 14 / e2e **20** 通过（smoke 6 + visual 14）/ tsc·eslint·lint:ui 0 错 / build 成功。
