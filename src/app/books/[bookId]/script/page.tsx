@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { StatusPill } from "@/components/ui/status-badge";
+import { ImpactPill } from "@/components/ui/impact-pill";
 import { JobRunner } from "@/components/jobs/job-runner";
 import { StagedReviewPanel } from "@/components/jobs/staged-review-panel";
 import { PlanSheet } from "@/components/jobs/plan-sheet";
@@ -237,9 +238,10 @@ export default function ScriptPage() {
         <section className="rounded-xl border border-zinc-200 p-5 text-sm">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold">{data.chapter.title}</h2>
-            <span className="text-xs text-zinc-500">
-              {data.chapter.estimated_duration_sec.toFixed(0)}s / 预算 {data.chapter.target_duration_sec}s ·{" "}
+            <span className="flex items-center gap-1.5 text-xs text-zinc-500">
+              {data.chapter.estimated_duration_sec.toFixed(0)}s / 预算 {data.chapter.target_duration_sec}s
               <StatusPill table="adapted_chapters" status={data.chapter.status} />
+              <ImpactPill bookId={bookId} table="adapted_chapters" rowId={data.chapter.id} status={data.chapter.status} />
             </span>
           </div>
           <p className="mt-2 text-zinc-600">{data.chapter.hook}</p>

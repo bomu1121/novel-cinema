@@ -7,6 +7,7 @@ import { useToast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { StatusPill } from "@/components/ui/status-badge";
+import { ImpactPill } from "@/components/ui/impact-pill";
 import { JobStepList } from "@/components/jobs/job-step-list";
 import { StagedReviewPanel } from "@/components/jobs/staged-review-panel";
 import { PlanSheet } from "@/components/jobs/plan-sheet";
@@ -339,10 +340,17 @@ export default function WorkbenchPage() {
             />
           )}
 
-        <p className="mt-2 text-xs text-zinc-500">
+        <p className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-zinc-500">
           章节 {data?.chapters?.length ?? 0} · 人物 {data?.characters?.length ?? 0} · beats{" "}
           {data?.beats?.length ?? 0} · 镜头 {data?.shots?.length ?? 0} · 图层 {data?.layers?.length ?? 0} · 资产{" "}
-          {data?.assets?.length ?? 0} · timeline <StatusPill table="timelines" status={data?.timeline?.status} />
+          {data?.assets?.length ?? 0}
+          <span className="inline-flex items-center gap-1.5">
+            timeline
+            <StatusPill table="timelines" status={data?.timeline?.status} />
+            {data?.timeline && (
+              <ImpactPill bookId={bookId} table="timelines" rowId={data.timeline.id} status={data.timeline.status} />
+            )}
+          </span>
         </p>
       </section>
 

@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:ui": "vitest run --config vitest.ui.config.mts",
     "test:e2e": "playwright test",
+    "seed:fixture": "tsx scripts/seed-fixture.ts",
     "lint:ui": "node .claude/skills/nc-ui-contract/scripts/lint-ui-contract.mjs",
     "render:local": "tsx scripts/render-local.ts",
     "pipeline:local": "tsx scripts/pipeline-local.ts",

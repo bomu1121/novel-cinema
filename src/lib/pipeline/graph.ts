@@ -119,14 +119,28 @@ export async function downstreamImpact(bookId: string, table: string, rowId: str
       out.push({ table: "adapted_chapters", count: chapters?.length ?? 0 });
       break;
     }
+    case "adapted_chapters": {
+      const { data: shots } = await s.from("shots").select("id").eq("book_id", bookId);
+      out.push({ table: "shots", count: shots?.length ?? 0 });
+      const { data: timelines } = await s.from("timelines").select("id").eq("book_id", bookId).eq("status", "stale");
+      out.push({ table: "timelines", count: timelines?.length ?? 0 });
+      break;
+    }
     case "beats": {
       const { data: shots } = await s.from("shots").select("id").eq("beat_id", rowId);
       out.push({ table: "shots", count: shots?.length ?? 0 });
+      const { data: takes } = await s.from("voice_takes").select("id").eq("beat_id", rowId);
+      if ((takes?.length ?? 0) > 0) out.push({ table: "voice_takes", count: takes?.length ?? 0 });
       break;
     }
     case "shots": {
       const { data: timelines } = await s.from("timelines").select("id").eq("book_id", bookId);
       out.push({ table: "timelines", count: timelines?.length ?? 0 });
+      break;
+    }
+    case "timelines": {
+      const { data: jobs } = await s.from("render_jobs").select("id").eq("book_id", bookId);
+      out.push({ table: "render_jobs", count: jobs?.length ?? 0 });
       break;
     }
     default:

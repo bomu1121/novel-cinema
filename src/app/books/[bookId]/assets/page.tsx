@@ -92,6 +92,19 @@ export default function AssetsPage() {
     { key: "expression", label: "表情变体", kind: "expression" },
   ];
 
+  // CandidateGallery：选两张候选并排对比（docs/06 §6.3）
+  const [compareIds, setCompareIds] = useState<string[]>([]);
+  function toggleCompare(id: string) {
+    setCompareIds((prev) =>
+      prev.includes(id)
+        ? prev.filter((x) => x !== id)
+        : prev.length >= 2
+          ? [...prev.slice(1), id]
+          : [...prev, id],
+    );
+  }
+  const compareAssets = data.assets.filter((a) => compareIds.includes(a.id));
+
   return (
     <main className="mx-auto max-w-5xl space-y-8 px-6 py-12">
       <header className="flex items-start justify-between">
@@ -147,46 +160,108 @@ export default function AssetsPage() {
               <p className="text-sm text-zinc-400">还没有候选。按上方按钮生成。</p>
             ) : (
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                {assets.map((asset) => (
-                  <div key={asset.id} className="overflow-hidden rounded-xl border border-zinc-200">
-                    <div className="aspect-square bg-zinc-100">
-                      {asset.url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={asset.url} alt={asset.title ?? asset.scene_key ?? ""} className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="flex h-full items-center justify-center text-xs text-zinc-400">无预览</div>
-                      )}
-                    </div>
-                    <div className="space-y-2 p-3 text-xs">
-                      <p className="truncate font-medium" title={asset.prompt ?? ""}>
-                        {asset.title ?? asset.scene_key}
-                      </p>
-                      <p className="text-zinc-400">
-                        {asset.expression ?? asset.kind} · <StatusPill table="assets" status={asset.status} />
-                      </p>
-                      {asset.status === "candidate" && (
-                        <Button
-                          size="sm"
-                          variant="approve"
-                          className="w-full"
-                          onClick={() => approve(asset.id)}
-                        >
-                          选这张
-                        </Button>
-                      )}
-                      {asset.status === "approved" && (
-                        <p className="rounded-lg border border-approved/40 bg-approved/10 px-2 py-1.5 text-center text-approved">
-                          ✓ 已批准
+                {assets.map((asset) => {
+                  const inCompare = compareIds.includes(asset.id);
+                  return (
+                    <div
+                      key={asset.id}
+                      className={`overflow-hidden rounded-xl border ${inCompare ? "border-review/60 ring-1 ring-review/40" : "border-zinc-200"}`}
+                    >
+                      <div className="aspect-square bg-zinc-100">
+                        {asset.url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={asset.url}
+                            alt={asset.title ?? asset.scene_key ?? ""}
+                            className={`h-full w-full object-cover ${inCompare ? "" : "transition-transform duration-fast hover:scale-105"}`}
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-xs text-zinc-400">无预览</div>
+                        )}
+                      </div>
+                      <div className="space-y-2 p-3 text-xs">
+                        <p className="truncate font-medium" title={asset.prompt ?? ""}>
+                          {asset.title ?? asset.scene_key}
                         </p>
-                      )}
+                        <p className="text-zinc-400">
+                          {asset.expression ?? asset.kind} · <StatusPill table="assets" status={asset.status} />
+                        </p>
+                        {asset.status === "candidate" && (
+                          <div className="flex gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="approve"
+                              className="flex-1"
+                              onClick={() => approve(asset.id)}
+                            >
+                              选这张
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant={inCompare ? "primary" : "secondary"}
+                              onClick={() => toggleCompare(asset.id)}
+                              aria-pressed={inCompare}
+                            >
+                              {inCompare ? "移出对比" : "对比"}
+                            </Button>
+                          </div>
+                        )}
+                        {asset.status === "approved" && (
+                          <p className="rounded-lg border border-approved/40 bg-approved/10 px-2 py-1.5 text-center text-approved">
+                            ✓ 已批准
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </section>
         );
       })}
+
+      {/* CandidateGallery 对比条（吸底）：两张候选并排，hover 放大查看细节 */}
+      {compareAssets.length === 2 && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface shadow-pop">
+          <div className="mx-auto grid max-w-4xl grid-cols-2 gap-4 p-4">
+            {compareAssets.map((a) => (
+              <div key={a.id} className="flex items-start gap-3">
+                <div className="aspect-square w-32 shrink-0 overflow-hidden rounded-lg border border-border bg-zinc-100">
+                  {a.url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={a.url}
+                      alt={a.title ?? ""}
+                      className="h-full w-full object-cover transition-transform duration-base hover:scale-150"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-xs text-zinc-400">无预览</div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1 text-xs">
+                  <p className="truncate font-medium">{a.title ?? a.scene_key}</p>
+                  <p className="mt-0.5 text-zinc-400">{a.expression ?? a.kind}</p>
+                  <p className="mt-1 line-clamp-2 text-zinc-500" title={a.prompt ?? ""}>
+                    {a.prompt ?? "无提示词"}
+                  </p>
+                  {a.status === "candidate" && (
+                    <Button size="sm" variant="approve" className="mt-2" onClick={() => approve(a.id)}>
+                      选这张
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-center gap-3 border-t border-border py-2 text-xs">
+            <span className="text-text-subtle">选第 3 张会替换最早选中项 · hover 图片放大</span>
+            <button type="button" className="text-review underline underline-offset-2" onClick={() => setCompareIds([])}>
+              关闭对比
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
