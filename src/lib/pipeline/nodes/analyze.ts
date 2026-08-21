@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/db";
+import { createCheckpoint } from "@/lib/checkpoints";
 import { completeJSON } from "@/lib/providers/llm";
 import {
   buildChunkExtractPrompt,
@@ -263,7 +264,7 @@ export async function persistStyleProposals(
   return created.id;
 }
 
-/** 签核 A：选定某一套风格方案 */
+/** 签核 A：选定某一套风格方案（批准前自动建 checkpoint，docs/06 P2 验收④） */
 export async function approveStyleBible(
   styleBibleId: string,
   proposalIndex: number,
@@ -271,7 +272,7 @@ export async function approveStyleBible(
   const supabase = getSupabaseAdmin();
   const { data: row } = await supabase
     .from("style_bibles")
-    .select("proposal_json")
+    .select("*")
     .eq("id", styleBibleId)
     .single();
   if (!row) return null;
@@ -279,6 +280,15 @@ export async function approveStyleBible(
   const proposals = (row.proposal_json ?? []) as StyleBibleProposal[];
   const selected = proposals[proposalIndex];
   if (!selected) return null;
+
+  // 批准即签核点：回滚可回到"批准风格方案之前"
+  createCheckpoint(
+    row.book_id,
+    `批准风格方案「${selected.visual_style ?? `方案 ${proposalIndex + 1}`}」`,
+    "approve",
+    "approve:bible",
+    [{ table: "style_bibles", rowId: styleBibleId, before: row, op: "update" }],
+  );
 
   await supabase
     .from("style_bibles")

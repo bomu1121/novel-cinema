@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { ErrorBanner } from "@/components/ui/error-banner";
+import { StatusPill } from "@/components/ui/status-badge";
+import { JobRunner } from "@/components/jobs/job-runner";
 
 interface VoiceRow {
   beat: {
@@ -58,25 +62,6 @@ export default function VoicePage() {
     void load();
   }, [load]);
 
-  async function generate() {
-    setBusy("generate");
-    setError(null);
-    try {
-      const res = await fetch(`/api/books/${bookId}/voice/generate`, { method: "POST" });
-      const json = await res.json();
-      if (!res.ok) {
-        setError(json.error ?? `合成失败（HTTP ${res.status}）`);
-        return;
-      }
-      if (json.errors?.length) setError(`部分失败：${json.errors.join("；")}`);
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(null);
-    }
-  }
-
   async function approve() {
     setBusy("approve");
     try {
@@ -121,36 +106,34 @@ export default function VoicePage() {
           </h1>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={generate}
+          <JobRunner
+            bookId={bookId}
+            node="voice"
+            label={`逐句合成（缺 ${missing} 句）`}
             disabled={busy !== null}
-            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-          >
-            {busy === "generate" ? "合成中…" : `逐句合成（缺 ${missing} 句）`}
-          </button>
-          <button
+            onRunningChange={(r) => setBusy(r ? "generate" : null)}
+            onDone={() => void load()}
+          />
+          <Button
+            variant="approve"
             onClick={approve}
             disabled={busy !== null || red > 0}
-            className="rounded-lg border border-emerald-600 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+            loading={busy === "approve"}
             title={red > 0 ? "先处理红项" : ""}
           >
-            {busy === "approve" ? "批准中…" : `批准全部（红项 ${red}）`}
-          </button>
+            批准全部（红项 {red}）
+          </Button>
         </div>
       </header>
 
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
+      <ErrorBanner message={error} onDismiss={() => setError(null)} />
 
       <ul className="space-y-2">
         {data.rows.map((row) => (
           <li
             key={row.beat.id}
             className={`rounded-xl border p-4 text-sm ${
-              row.take?.error ? "border-red-300 bg-red-50" : "border-zinc-200"
+              row.take?.error ? "border-stale/40 bg-stale/10" : "border-zinc-200"
             }`}
           >
             <div className="flex items-center justify-between">
@@ -162,25 +145,27 @@ export default function VoicePage() {
               </p>
               {row.take && (
                 <span className="flex items-center gap-2 text-xs text-zinc-500">
-                  {row.take.status}
+                  <StatusPill table="voice_takes" status={row.take.status} />
                   {row.take.asr_confidence != null && (
-                    <span className={row.take.asr_confidence < 0.85 ? "text-red-600" : ""}>
+                    <span className={row.take.asr_confidence < 0.85 ? "text-stale" : ""}>
                       ASR {Math.round(row.take.asr_confidence * 100)}%
                     </span>
                   )}
-                  <button
+                  <Button
+                    size="sm"
+                    variant="secondary"
                     onClick={() => redo(row.take!.id)}
                     disabled={busy !== null}
-                    className="rounded border border-zinc-300 px-2 py-1 hover:border-zinc-900 disabled:opacity-50"
+                    loading={busy === row.take.id}
                   >
-                    {busy === row.take.id ? "重录中…" : "重录"}
-                  </button>
+                    重录
+                  </Button>
                 </span>
               )}
             </div>
             <p className="mt-1 text-zinc-700">{row.beat.text}</p>
             {row.take?.error?.message && (
-              <p className="mt-1 text-xs text-red-600">{row.take.error.message}</p>
+              <p className="mt-1 text-xs text-stale">{row.take.error.message}</p>
             )}
             {row.url ? (
               <audio controls src={row.url} className="mt-2 h-8 w-full" />

@@ -3,11 +3,14 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-
-const EMOTIONS = [
-  "neutral", "calm", "happy", "sad", "angry", "fear",
-  "surprise", "suspicious", "nervous", "pain", "determined", "whisper",
-];
+import { Button } from "@/components/ui/button";
+import { ErrorBanner } from "@/components/ui/error-banner";
+import { StatusPill } from "@/components/ui/status-badge";
+import { JobRunner } from "@/components/jobs/job-runner";
+import { StagedReviewPanel } from "@/components/jobs/staged-review-panel";
+import { PlanSheet } from "@/components/jobs/plan-sheet";
+import { useToast } from "@/components/toast";
+import { EMOTIONS } from "@/lib/ui/enums";
 
 interface BeatRow {
   id: string;
@@ -52,25 +55,49 @@ interface ReviewItem {
   suggestion: string;
 }
 
-interface AdaptResponse {
-  adaptedChapterId: string;
-  adapt: { title: string; hook: string; beats: BeatRow[]; selection_report: ChapterRow["selection_report"] };
-  review: { verdict: string; items: ReviewItem[] };
-  context: { targetSec: number; characterNames: string[]; clueNames: string[] };
-}
-
 type BeatEdit = { text: string; emotion: string; pace: number; visual_note: string };
 
 export default function ScriptPage() {
   const params = useParams<{ bookId: string }>();
   const bookId = params.bookId;
+  const toast = useToast();
 
   const [data, setData] = useState<ScriptData>({ chapter: null, beats: [] });
   const [review, setReview] = useState<ReviewItem[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [running, setRunning] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
   const [edits, setEdits] = useState<Record<string, BeatEdit>>({});
+  const [stagedJobId, setStagedJobId] = useState<string | null>(null);
+  const [showPlan, setShowPlan] = useState(false);
+
+  // 建议 chips → 预演卡 → 入队（docs/06 P3：预报→diff→撤销链路）
+  async function startAdaptJob() {
+    setShowPlan(false);
+    setError(null);
+    try {
+      const res = await fetch(`/api/books/${bookId}/jobs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ node: "adapt" }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "入队失败");
+      setStagedJobId(json.jobId as string);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  // 挂载时接回未完成的审阅（刷新页面后恢复）
+  useEffect(() => {
+    fetch(`/api/books/${bookId}/staged`)
+      .then((r) => r.json())
+      .then((json) => {
+        const g = (json.groups ?? []).find((x: { node: string }) => x.node === "adapt");
+        if (g?.jobId) setStagedJobId(g.jobId);
+      })
+      .catch(() => undefined);
+  }, [bookId]);
 
   const load = useCallback(async () => {
     try {
@@ -81,6 +108,7 @@ export default function ScriptPage() {
         return;
       }
       setData(json);
+      setReview(json.review ?? []);
       const next: Record<string, BeatEdit> = {};
       for (const b of (json.beats ?? []) as BeatRow[]) {
         next[b.id] = { text: b.text, emotion: b.emotion, pace: b.pace, visual_note: b.visual_note };
@@ -97,29 +125,6 @@ export default function ScriptPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
-
-  async function runAdapt() {
-    setRunning(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/books/${bookId}/adapt`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const json = (await res.json()) as AdaptResponse & { error?: string };
-      if (!res.ok) {
-        setError(json.error ?? `改编失败（HTTP ${res.status}）`);
-        return;
-      }
-      setReview(json.review?.items ?? []);
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setRunning(false);
-    }
-  }
 
   async function saveBeat(beatId: string) {
     const edit = edits[beatId];
@@ -143,6 +148,18 @@ export default function ScriptPage() {
       setSaving(null);
     }
   }
+
+  // 证据定位（docs/06 §6.3 EvidenceDisclosure）：AI 结论 → 滚动到对应 beat 并闪烁
+  const jumpToBeat = useCallback((beatIdx: number) => {
+    const el = document.getElementById(`beat-card-${beatIdx}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.remove("stale-flash");
+    // 强制重排后重新加类，保证闪烁动画重新触发
+    void el.offsetWidth;
+    el.classList.add("stale-flash");
+    window.setTimeout(() => el.classList.remove("stale-flash"), 1200);
+  }, []);
 
   async function approveChapter() {
     if (!data.chapter) return;
@@ -179,29 +196,42 @@ export default function ScriptPage() {
           </h1>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={runAdapt}
-            disabled={running}
-            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-          >
-            {running ? "AI 改编中…" : "运行章节改编"}
-          </button>
+          <JobRunner
+            bookId={bookId}
+            node="adapt"
+            label="运行章节改编"
+            onDone={(jobId) => {
+              toast.push("info", "改编完成，进入逐条审阅（应用前不覆盖任何数据）", undefined);
+              setStagedJobId(jobId);
+            }}
+          />
           {data.chapter && data.chapter.status !== "approved" && (
-            <button
-              onClick={approveChapter}
-              className="rounded-lg border border-emerald-600 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
-            >
+            <Button variant="approve" onClick={approveChapter}>
               批准本章
-            </button>
+            </Button>
           )}
         </div>
       </header>
 
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
+      {stagedJobId && (
+        <StagedReviewPanel
+          bookId={bookId}
+          jobId={stagedJobId}
+          nodeLabel="改编脚本审阅"
+          onApplied={(result) => {
+            toast.push("success", `已应用 ${result.applied} 处变更（驳回 ${result.rejected}）`, undefined);
+            setStagedJobId(null);
+            void load();
+          }}
+          onDiscarded={() => {
+            toast.push("info", "已放弃本次改编，数据未改动", undefined);
+            setStagedJobId(null);
+            void load();
+          }}
+        />
       )}
+
+      <ErrorBanner message={error} />
 
       {data.chapter && (
         <section className="rounded-xl border border-zinc-200 p-5 text-sm">
@@ -209,13 +239,13 @@ export default function ScriptPage() {
             <h2 className="font-semibold">{data.chapter.title}</h2>
             <span className="text-xs text-zinc-500">
               {data.chapter.estimated_duration_sec.toFixed(0)}s / 预算 {data.chapter.target_duration_sec}s ·{" "}
-              {data.chapter.status}
+              <StatusPill table="adapted_chapters" status={data.chapter.status} />
             </span>
           </div>
           <p className="mt-2 text-zinc-600">{data.chapter.hook}</p>
           {data.chapter.selection_report?.cut && data.chapter.selection_report.cut.length > 0 && (
             <details className="mt-3">
-              <summary className="cursor-pointer text-xs text-amber-700">
+              <summary className="cursor-pointer text-xs text-regen">
                 取舍报告：删除 {data.chapter.selection_report.cut.length} 处（点击展开）
               </summary>
               <ul className="mt-2 space-y-1 pl-5 text-xs text-zinc-600">
@@ -231,24 +261,56 @@ export default function ScriptPage() {
       )}
 
       {review.length > 0 && (
-        <section className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm">
-          <h2 className="font-semibold text-red-800">AI 自检发现 {review.length} 个问题</h2>
+        <section className="rounded-xl border border-stale/40 bg-stale/10 p-5 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-semibold text-stale">
+              AI 自检发现 {review.length} 个问题（点击定位到对应 beat）
+            </h2>
+            <Button size="sm" variant="secondary" onClick={() => setShowPlan((s) => !s)}>
+              💡 一键重跑修复
+            </Button>
+          </div>
+          {showPlan && (
+            <PlanSheet
+              className="mt-3"
+              bookId={bookId}
+              node="adapt"
+              busy={stagedJobId !== null}
+              onExecute={() => void startAdaptJob()}
+              onCancel={() => setShowPlan(false)}
+            />
+          )}
           <ul className="mt-2 space-y-1">
-            {review.map((item, i) => (
-              <li key={i} className={item.severity === "red" ? "text-red-700" : "text-amber-700"}>
-                <span className="mr-2 rounded bg-white px-1.5 py-0.5 text-xs">
-                  {item.severity === "red" ? "红" : "黄"}
-                </span>
-                beat#{item.beat_idx} · {item.kind}：{item.issue}
-                {item.suggestion ? `（建议：${item.suggestion}）` : ""}
-              </li>
-            ))}
+            {review.map((item, i) =>
+              item.kind === "adapt_validation" ? (
+                // 改编校验失败诊断（无 beat 可定位，只读展示）
+                <li key={i} className="text-stale">
+                  <span className="mr-2 rounded bg-surface px-1.5 py-0.5 text-xs">失败</span>
+                  【改编校验失败】{item.issue}
+                  {item.suggestion ? `（建议：${item.suggestion}）` : ""}
+                </li>
+              ) : (
+                <li key={i} className={item.severity === "red" ? "text-stale" : "text-regen"}>
+                  <button
+                    type="button"
+                    onClick={() => jumpToBeat(item.beat_idx)}
+                    className="text-left underline decoration-dotted underline-offset-2 hover:bg-surface/60"
+                  >
+                    <span className="mr-2 rounded bg-surface px-1.5 py-0.5 text-xs">
+                      {item.severity === "red" ? "红" : "黄"}
+                    </span>
+                    beat#{item.beat_idx} · {item.kind}：{item.issue}
+                    {item.suggestion ? `（建议：${item.suggestion}）` : ""}
+                  </button>
+                </li>
+              ),
+            )}
           </ul>
         </section>
       )}
 
       <section className="space-y-3">
-        {data.beats.length === 0 && !running && (
+        {data.beats.length === 0 && (
           <p className="text-sm text-zinc-400">
             还没有脚本。先在“全书档案”页跑一次分析（人物/线索/风格），再回来点“运行章节改编”。
           </p>
@@ -260,8 +322,9 @@ export default function ScriptPage() {
           return (
             <div
               key={beat.id}
+              id={`beat-card-${beat.idx}`}
               className={`rounded-xl border p-4 text-sm ${
-                red ? "border-red-300 bg-red-50" : "border-zinc-200"
+                red ? "border-stale/40 bg-stale/10" : "border-zinc-200"
               }`}
             >
               <div className="flex items-center justify-between">
@@ -276,13 +339,15 @@ export default function ScriptPage() {
                 </p>
                 <div className="flex items-center gap-2 text-xs text-zinc-500">
                   <span>{beat.estimated_duration_sec.toFixed(1)}s</span>
-                  <button
+                  <Button
+                    size="sm"
+                    variant="secondary"
                     onClick={() => saveBeat(beat.id)}
                     disabled={saving === beat.id}
-                    className="rounded border border-zinc-300 px-2 py-1 hover:border-zinc-900 disabled:opacity-50"
+                    loading={saving === beat.id}
                   >
-                    {saving === beat.id ? "保存中…" : "保存修改"}
-                  </button>
+                    保存修改
+                  </Button>
                 </div>
               </div>
 

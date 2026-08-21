@@ -1,31 +1,111 @@
 @import "tailwindcss";
 
+/*
+ * novel-cinema 设计令牌（docs/06-ui-optimization-plan.md §5）
+ * 颜色/间距/圆角/动效一律用令牌，禁止在组件里硬编码字面量。
+ * 状态色三族语义见 docs/06 §5.3：审阅态 / 执行态 / 领域语义。
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* —— 表面与文字 —— */
+  --surface: #ffffff;
+  --surface-2: #f7f7f8;
+  --surface-3: #eeeef1;
+  --edge: #e4e4e7;
+  --edge-strong: #d4d4d8;
+  --ink: #18181b;
+  --ink-muted: #71717a;
+  --ink-subtle: #a1a1aa;
+
+  /* —— 审阅状态色（族 A，docs/06 §5.3） —— */
+  --st-approved: #059669;
+  --st-review: #2563eb;
+  --st-draft: #71717a;
+  --st-stale: #dc2626;
+  --st-regen: #d97706;
+  --st-rejected: #a1a1aa;
+
+  /* —— 动效时长（对齐 Material 3 三档：short 50-200 / medium 200-400 / long 400-700） —— */
+  --dur-instant: 100ms;
+  --dur-fast: 160ms;
+  --dur-base: 240ms;
+  --dur-slow: 320ms;
+  --dur-stagger: 40ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-inout: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* —— 圆角 / 阴影 / 命中区 —— */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 4px 12px rgb(0 0 0 / 0.04);
+  --shadow-pop: 0 8px 32px rgb(0 0 0 / 0.12);
+  --hit-min: 24px;
+  --hit-comfortable: 36px;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-border: var(--edge);
+  --color-border-strong: var(--edge-strong);
+  --color-text: var(--ink);
+  --color-text-muted: var(--ink-muted);
+  --color-text-subtle: var(--ink-subtle);
+  --color-approved: var(--st-approved);
+  --color-review: var(--st-review);
+  --color-draft: var(--st-draft);
+  --color-stale: var(--st-stale);
+  --color-regen: var(--st-regen);
+  --color-rejected: var(--st-rejected);
+  --font-sans: var(--font-geist-sans), system-ui, "Microsoft YaHei", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "Cascadia Code", monospace;
+  --duration-instant: var(--dur-instant);
+  --duration-fast: var(--dur-fast);
+  --duration-base: var(--dur-base);
+  --duration-slow: var(--dur-slow);
+  --ease-out: var(--ease-out);
+  --ease-inout: var(--ease-inout);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --shadow-card: var(--shadow-card);
+  --shadow-pop: var(--shadow-pop);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans);
 }
 
-/* 分镜预览动效（CSS 近似，正式渲染由 FFmpeg 实现） */
+/* 键盘可达性基线（docs/06 §5.5） */
+:focus-visible {
+  outline: 2px solid var(--st-review);
+  outline-offset: 2px;
+}
+
+/* reduced-motion 全局兜底（W3C C39）：内容型预览动画（kb-*）需静态兜底，见下方 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+  .kb-in,
+  .kb-out,
+  .kb-pan,
+  .kb-breath {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
+/* 分镜预览动效（CSS 近似，正式渲染由 FFmpeg 实现）
+ * 这是"内容"而非装饰：reduced-motion 下停首帧并在 UI 侧显示静态标记 */
 @keyframes kb-in {
   from { transform: scale(1); }
   to { transform: scale(1.12); }
@@ -46,3 +126,10 @@ body {
 .kb-out { animation: kb-out 4s ease-in-out infinite alternate; }
 .kb-pan { animation: kb-pan 4s ease-in-out infinite alternate; }
 .kb-breath { animation: breath 2.6s ease-in-out infinite alternate; }
+
+/* stale 状态一次性呼吸提示（1 次后静止，不无限循环） */
+@keyframes stale-flash {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(220 38 38 / 0); }
+  50% { box-shadow: 0 0 0 3px rgb(220 38 38 / 0.35); }
+}
+.stale-flash { animation: stale-flash 1s ease-out 1; }

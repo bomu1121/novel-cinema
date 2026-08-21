@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getSupabaseAdmin } from "@/lib/db";
+import { createCheckpoint } from "@/lib/checkpoints";
+import { JobCancelledError, NOOP_REPORTER, type ProgressReporter } from "@/lib/jobs/types";
 import { r2Put } from "@/lib/r2";
 import { charSimilarity, isASRConfigured, transcribe } from "@/lib/providers/asr";
 import { getTTSProvider } from "@/lib/providers/tts";
@@ -154,7 +156,9 @@ function speechParams(beat: BeatRow, profile: VoiceProfileRow): {
 /** V10：为最新一章缺失的 beat 逐句合成（已有 take 的 beat 跳过） */
 export async function generateVoiceTakes(
   bookId: string,
+  reporter?: ProgressReporter,
 ): Promise<{ generated: number; skipped: number; errors: string[] }> {
+  const r = reporter ?? NOOP_REPORTER;
   const supabase = getSupabaseAdmin();
   const { data: chapter } = await supabase
     .from("adapted_chapters")
@@ -177,9 +181,13 @@ export async function generateVoiceTakes(
   let generated = 0;
   let skipped = 0;
   const errors: string[] = [];
+  let done = 0;
 
   for (const beat of beats) {
     if (beat.speaker_type !== "narrator" && beat.speaker_type !== "character") continue;
+
+    r.step(`合成第 ${done + 1}/${beats.length} 句`, done + 1, beats.length);
+    if (r.checkCancelled()) throw new JobCancelledError();
 
     const { data: existing } = await supabase
       .from("voice_takes")
@@ -189,6 +197,8 @@ export async function generateVoiceTakes(
       .maybeSingle();
     if (existing) {
       skipped += 1;
+      done += 1;
+      r.progress(done / beats.length);
       continue;
     }
 
@@ -273,6 +283,8 @@ export async function generateVoiceTakes(
     } catch (err) {
       errors.push(`beat#${beat.idx}: ${err instanceof Error ? err.message : String(err)}`);
     }
+    done += 1;
+    r.progress(done / beats.length);
   }
 
   return { generated, skipped, errors };
@@ -427,6 +439,28 @@ export async function approveVoiceTakes(bookId: string): Promise<void> {
     .select("id")
     .eq("adapted_chapter_id", chapter.id);
   const beatIds = (beatRows ?? []).map((b: { id: string }) => b.id);
+
+  // 签核点：批准配音前快照将被改动的 take 行
+  const { data: takes } = await supabase
+    .from("voice_takes")
+    .select("*")
+    .in("beat_id", beatIds)
+    .is("error", null);
+  if ((takes ?? []).length > 0) {
+    createCheckpoint(
+      bookId,
+      `批准配音（${(takes ?? []).length} 句）`,
+      "approve",
+      "approve:voice",
+      ((takes ?? []) as Array<Record<string, unknown>>).map((t) => ({
+        table: "voice_takes",
+        rowId: t.id as string,
+        before: t,
+        op: "update" as const,
+      })),
+    );
+  }
+
   await supabase
     .from("voice_takes")
     .update({ status: "accepted" })

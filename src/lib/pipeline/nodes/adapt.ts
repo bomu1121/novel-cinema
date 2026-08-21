@@ -1,4 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/db";
+import { createCheckpoint } from "@/lib/checkpoints";
+import { JobCancelledError, NOOP_REPORTER, type ProgressReporter } from "@/lib/jobs/types";
 import { completeJSON } from "@/lib/providers/llm";
 import {
   buildAdaptPrompt,
@@ -21,8 +23,19 @@ export interface SourceChapterForAdapt {
   cleanedText: string;
 }
 
+/** 校验重试耗尽：携带错误列表与最后一次模型输出，由调用方降级（写入待审收件箱） */
+export class AdaptationValidationError extends Error {
+  constructor(
+    public readonly errors: string[],
+    public readonly lastAdapt: AdaptedChapter | null,
+  ) {
+    super(`改编校验连续失败：${errors.length} 项`);
+    this.name = "AdaptationValidationError";
+  }
+}
+
 export interface AdaptRunResult {
-  adaptedChapterId: string;
+  adaptedChapterId: string | null;
   adapt: AdaptedChapter;
   review: ScriptReview;
   context: {
@@ -30,6 +43,9 @@ export interface AdaptRunResult {
     characterNames: string[];
     clueNames: string[];
   };
+  /** dryRun 时提供（staging 需要用它生成完整 beat 行） */
+  characterIdByName?: Map<string, string>;
+  clueIdByName?: Map<string, string>;
 }
 
 /** 单章时长预算：3000 字基准 180s，线性缩放，夹在 60~600s */
@@ -59,6 +75,61 @@ export function estimateBeatDuration(beat: Beat): number {
 
 function normalizeForMatch(text: string): string {
   return text.replace(/[\s\u3000]/g, "");
+}
+
+/** 归一化偏移 → 原文偏移（跳过空白；找不到返回 [-1,-1]） */
+function mapNormalizedToRaw(raw: string, normStart: number, normLen: number): [number, number] {
+  let normPos = 0;
+  let rawStart = -1;
+  let rawEnd = -1;
+  for (let i = 0; i < raw.length; i++) {
+    if (/[\s\u3000]/.test(raw[i])) continue;
+    if (normPos === normStart) rawStart = i;
+    if (normPos === normStart + normLen - 1) {
+      rawEnd = i + 1;
+      break;
+    }
+    normPos++;
+  }
+  return [rawStart, rawEnd];
+}
+
+/**
+ * 确定性修复 source_span（真实数据验证：模型在重试压力下 span 定位越错越多，劣化明显）。
+ * 用 beat.text 在原文中模糊定位并修正 start/end/quote；返回修复条数。
+ */
+export function repairSourceSpans(input: AdaptContextInput, adapt: AdaptedChapter): number {
+  const norm = normalizeForMatch(input.chapterText);
+  let repaired = 0;
+  for (const beat of adapt.beats) {
+    const span = beat.source_span;
+    const q = normalizeForMatch(span.quote);
+    if (q && norm.includes(q)) continue; // 已可定位
+    const needle = normalizeForMatch(beat.text);
+    const idx = norm.indexOf(needle);
+    if (idx < 0) continue;
+    const [start, end] = mapNormalizedToRaw(input.chapterText, idx, needle.length);
+    if (start >= 0 && end > start) {
+      span.start_char = start;
+      span.end_char = end;
+      span.quote = input.chapterText.slice(start, end);
+      repaired++;
+    }
+  }
+  return repaired;
+}
+
+/** 确定性压缩：总时长按比例压到预算 110% 内；返回是否发生了压缩 */
+export function applyDurationCap(input: AdaptContextInput, adapt: AdaptedChapter): boolean {
+  const total = adapt.beats.reduce((sum, b) => sum + b.estimated_duration_sec, 0);
+  const cap = input.targetSec * 1.1;
+  if (total <= cap) return false;
+  const ratio = cap / total;
+  adapt.beats = adapt.beats.map((b) => ({
+    ...b,
+    estimated_duration_sec: Math.round(b.estimated_duration_sec * ratio * 10) / 10,
+  }));
+  return true;
 }
 
 interface StyleBibleForAdapt {
@@ -214,25 +285,37 @@ export function validateAdaptation(
     if (beat.speaker_type === "character" && (!beat.character_name || !allowed.has(beat.character_name))) {
       errors.push(`beat[${i}] 说话人 "${beat.character_name ?? ""}" 不在人物白名单`);
     }
-    if (beat.type === "narration" && beat.text.replace(/\s/g, "").length > 40) {
-      errors.push(`beat[${i}] 旁白超过 8 秒朗读上限（约 40 字）`);
+    if (beat.type === "narration" && beat.text.replace(/\s/g, "").length > 50) {
+      errors.push(`beat[${i}] 旁白超过 10 秒朗读上限（约 50 字）`);
     }
   });
 
   return errors;
 }
 
-/** C10：改编 + 语义校验重试 + C20 自检 */
+/** 仅剩"总时长超限"一类错误（其他规则全过）→ 可用确定性压缩兜底，不必浪费一次 LLM 重试 */
+export function isOnlyDurationError(errors: string[]): boolean {
+  return errors.length > 0 && errors.every((e) => e.startsWith("总时长"));
+}
+
+/** C10：改编 + 语义校验重试 + C20 自检。dryRun=true 时只计算不落库（供 staging 审阅）。 */
 export async function runAdaptation(
   bookId: string,
   chapter: SourceChapterForAdapt,
+  reporter?: ProgressReporter,
+  dryRun = false,
 ): Promise<AdaptRunResult> {
+  const r = reporter ?? NOOP_REPORTER;
+  r.step("加载改编上下文（人物/线索/风格）", 1, 4);
   const { input, characterIdByName, clueIdByName } = await loadAdaptContext(bookId, chapter);
   const system = buildAdaptSystem(input.targetSec);
 
   let adapt: AdaptedChapter | null = null;
   let lastErrors: string[] = [];
+  /** 最近一次模型输出（重试耗尽时降级用：可确定性修复的部分已在循环内处理过） */
+  let adaptAtFailure: AdaptedChapter | null = null;
 
+  r.step("AI 改编章节（含规则校验重试）", 2, 4);
   for (let attempt = 1; attempt <= 3; attempt++) {
     const prompt = lastErrors.length
       ? `${buildAdaptPrompt(input)}\n\n【上次输出被规则校验拒绝，请修正以下问题后重新输出】\n${lastErrors.map((e) => `- ${e}`).join("\n")}`
@@ -243,11 +326,13 @@ export async function runAdaptation(
       prompt,
       schema: adaptedChapterSchema,
       tier: "strong",
-      temperature: 0.5,
-      maxTokens: 8000,
+      // 结构化创作：低温度更稳；重试次数 4 次（模型常在时长预算上反复超限，真实数据验证发现）
+      temperature: 0.3,
+      // 大章节 + 全量 beats JSON 易被 8K 截断（真实数据验证发现），提到 16K
+      maxTokens: 16000,
       bookId,
       node: "adapt.chapter",
-      maxAttempts: 3,
+      maxAttempts: 4,
     });
 
     const errors = validateAdaptation(input, result.data);
@@ -255,13 +340,44 @@ export async function runAdaptation(
       adapt = result.data;
       break;
     }
-    lastErrors = errors;
+    // 确定性兜底优先于随机重试（真实数据验证：模型反复超预算、重试压力下 span 定位劣化）
+    // ① 仅超时长 → 按比例压缩
+    if (isOnlyDurationError(errors)) {
+      applyDurationCap(input, result.data);
+      adapt = result.data;
+      r.log("总时长超预算，已按比例压缩到预算内");
+      break;
+    }
+    // ② 仅 span/时长类错误 → 模糊定位修复，不再让模型重试
+    if (errors.every((e) => e.includes("source_span") || e.startsWith("总时长"))) {
+      const repaired = repairSourceSpans(input, result.data);
+      const after = validateAdaptation(input, result.data);
+      if (after.length === 0) {
+        adapt = result.data;
+        if (repaired > 0) r.log(`已自动修正 ${repaired} 处 source_span 定位（确定性修复）`);
+        break;
+      }
+      if (isOnlyDurationError(after)) {
+        applyDurationCap(input, result.data);
+        adapt = result.data;
+        r.log(`已自动修正 ${repaired} 处 source_span 并压缩时长`);
+        break;
+      }
+      lastErrors = after;
+    } else {
+      lastErrors = errors;
+    }
+    adaptAtFailure = result.data;
+    r.log(`第 ${attempt} 次输出未过规则校验：${errors.length} 项，正在修正重试`);
+    if (r.checkCancelled()) throw new JobCancelledError();
   }
 
   if (!adapt) {
-    throw new Error(`改编校验连续失败：\n${lastErrors.join("\n")}`);
+    // 重试耗尽：携带最后输出与全部错误抛出，调用方负责降级（写入待审收件箱）
+    throw new AdaptationValidationError(lastErrors, adaptAtFailure);
   }
 
+  r.step("AI 自检（红黄项报告）", 3, 4);
   const reviewResult = await completeJSON({
     system: "你是审片员，只输出 JSON。",
     prompt: buildReviewPrompt(
@@ -283,14 +399,20 @@ export async function runAdaptation(
     node: "review.script",
   });
 
-  const adaptedChapterId = await persistAdaptation(
-    bookId,
-    chapter.id,
-    adapt,
-    characterIdByName,
-    clueIdByName,
-    input.targetSec,
-  );
+  let adaptedChapterId: string | null = null;
+  if (!dryRun) {
+    r.step("落库（beats + 自检报告）", 4, 4);
+    adaptedChapterId = await persistAdaptation(
+      bookId,
+      chapter.id,
+      adapt,
+      characterIdByName,
+      clueIdByName,
+      input.targetSec,
+    );
+  } else {
+    r.step("生成变更清单（未落库，等待审阅）", 4, 4);
+  }
 
   return {
     adaptedChapterId,
@@ -301,32 +423,34 @@ export async function runAdaptation(
       characterNames: [...characterIdByName.keys()],
       clueNames: [...clueIdByName.keys()],
     },
+    characterIdByName,
+    clueIdByName,
   };
 }
 
-async function persistAdaptation(
+/** 计算改编落库写入（不落库）：章节 payload + beats 行。staging 预览与持久化共用。 */
+export async function buildAdaptationWrite(
   bookId: string,
   sourceChapterId: string,
   adapt: AdaptedChapter,
   characterIdByName: Map<string, string>,
   clueIdByName: Map<string, string>,
   targetSec: number,
-): Promise<string> {
+): Promise<{ payload: Record<string, unknown>; beatRows: Array<Record<string, unknown>>; existingChapterId: string | null }> {
   const supabase = getSupabaseAdmin();
-
   const { data: existing } = await supabase
     .from("adapted_chapters")
     .select("id")
     .eq("source_chapter_id", sourceChapterId)
     .maybeSingle();
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     book_id: bookId,
     source_chapter_id: sourceChapterId,
     idx: 1,
     title: adapt.title,
     hook: adapt.hook,
-    status: "pending_review" as const,
+    status: "pending_review",
     model: "deepseek-chat",
     target_duration_sec: targetSec,
     estimated_duration_sec: adapt.beats.reduce((s, b) => s + b.estimated_duration_sec, 0),
@@ -335,24 +459,9 @@ async function persistAdaptation(
     raw_output: adapt,
   };
 
-  let adaptedChapterId: string;
-  if (existing) {
-    adaptedChapterId = existing.id;
-    await supabase.from("adapted_chapters").update(payload).eq("id", existing.id);
-    await supabase.from("beats").delete().eq("adapted_chapter_id", existing.id);
-  } else {
-    const { data: created, error } = await supabase
-      .from("adapted_chapters")
-      .insert(payload)
-      .select("id")
-      .single();
-    if (error) throw error;
-    adaptedChapterId = created.id;
-  }
-
-  const rows = adapt.beats.map((b) => ({
+  const beatRows = adapt.beats.map((b) => ({
     book_id: bookId,
-    adapted_chapter_id: adaptedChapterId,
+    adapted_chapter_id: existing?.id ?? "",
     idx: b.idx,
     type: b.type,
     speaker_type: b.speaker_type,
@@ -366,9 +475,41 @@ async function persistAdaptation(
     clue_ids: b.clue_names.map((n) => clueIdByName.get(n)).filter(Boolean),
     flags: b.flags,
     estimated_duration_sec: b.estimated_duration_sec,
-    status: "draft" as const,
+    status: "draft",
   }));
 
+  return { payload, beatRows, existingChapterId: existing?.id ?? null };
+}
+
+async function persistAdaptation(
+  bookId: string,
+  sourceChapterId: string,
+  adapt: AdaptedChapter,
+  characterIdByName: Map<string, string>,
+  clueIdByName: Map<string, string>,
+  targetSec: number,
+): Promise<string> {
+  const supabase = getSupabaseAdmin();
+  const { payload, beatRows, existingChapterId } = await buildAdaptationWrite(
+    bookId, sourceChapterId, adapt, characterIdByName, clueIdByName, targetSec,
+  );
+
+  let adaptedChapterId: string;
+  if (existingChapterId) {
+    adaptedChapterId = existingChapterId;
+    await supabase.from("adapted_chapters").update(payload).eq("id", existingChapterId);
+    await supabase.from("beats").delete().eq("adapted_chapter_id", existingChapterId);
+  } else {
+    const { data: created, error } = await supabase
+      .from("adapted_chapters")
+      .insert(payload)
+      .select("id")
+      .single();
+    if (error) throw error;
+    adaptedChapterId = created.id;
+  }
+
+  const rows = beatRows.map((row) => ({ ...row, adapted_chapter_id: adaptedChapterId }));
   const { error: beatsError } = await supabase.from("beats").insert(rows);
   if (beatsError) throw beatsError;
   return adaptedChapterId;
@@ -376,6 +517,29 @@ async function persistAdaptation(
 
 export async function approveAdaptedChapter(adaptedChapterId: string): Promise<void> {
   const supabase = getSupabaseAdmin();
+  const { data: chapter } = await supabase
+    .from("adapted_chapters")
+    .select("*")
+    .eq("id", adaptedChapterId)
+    .single();
+  if (!chapter) return;
+
+  // 签核点：整章快照（章节行 + 全部 beats），可回滚到"批准本章之前"
+  const { data: beats } = await supabase
+    .from("beats")
+    .select("*")
+    .eq("adapted_chapter_id", adaptedChapterId);
+  const entries: Array<{ table: string; rowId: string; before: Record<string, unknown>; op: "update" | "delete" }> = [
+    { table: "adapted_chapters", rowId: adaptedChapterId, before: chapter, op: "update" },
+    ...((beats ?? []) as Array<{ id: string }>).map((b) => ({
+      table: "beats",
+      rowId: b.id,
+      before: b as Record<string, unknown>,
+      op: "delete" as const,
+    })),
+  ];
+  createCheckpoint(chapter.book_id, `批准本章「${chapter.title ?? adaptedChapterId}」`, "approve", "approve:script", entries);
+
   await supabase
     .from("adapted_chapters")
     .update({ status: "approved", reviewed_at: new Date().toISOString() })

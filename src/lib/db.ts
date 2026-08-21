@@ -16,6 +16,8 @@ mkdirSync(dataDir, { recursive: true });
 const database = new Database(path.join(dataDir, "novel-cinema.db"));
 database.pragma("journal_mode = WAL");
 database.pragma("foreign_keys = ON");
+// 多进程共享（Next 服务端 + jobs worker 子进程）写锁等待，而非立即报错
+database.pragma("busy_timeout = 10000");
 ensureSchema(database);
 
 // ---------- 类型映射 ----------
@@ -59,6 +61,16 @@ function decodeRow(table: string, row: Record<string, any> | null): Record<strin
     }
   }
   return out;
+}
+
+/**
+ * 把解码后的值重新编码为可绑定的 SQLite 值（JSON 列 stringify、boolean→0/1）。
+ * checkpoints 恢复行时复用，保证与 encodeRow 一致。
+ */
+export function encodeDbValue(key: string, value: unknown): unknown {
+  if (typeof value === "boolean") return value ? 1 : 0;
+  if (value != null && JSON_COLUMNS.has(key) && typeof value !== "string") return JSON.stringify(value);
+  return value;
 }
 
 function ident(name: string): string {
@@ -311,6 +323,16 @@ export function getSupabaseAdmin(): FakeClient {
 /** 单人本地版没有登录：保留占位接口。 */
 export function getSupabaseUserClient(): FakeClient {
   return fakeClient;
+}
+
+// ---------- 原生访问（checkpoint / 批量事务用，QueryBuilder 能力边界之外） ----------
+
+/** 原生 better-sqlite3 句柄：仅供 lib/ 内部需要事务或原生 SQL 的模块使用（如 checkpoints）。 */
+export const rawDb: Database.Database = database;
+
+/** 在单个事务中执行 fn；抛错则整体回滚。批量快照 / staging 落库必须走这里，避免半批写入。 */
+export function runInTransaction<T>(fn: () => T): T {
+  return database.transaction(fn)();
 }
 
 // ---------- SQLite schema（对应 supabase/migrations/0001_schema.sql 的本地等价） ----------
@@ -699,10 +721,27 @@ CREATE TABLE IF NOT EXISTS jobs (
   max_attempts INTEGER NOT NULL DEFAULT 3,
   error TEXT,
   cost TEXT NOT NULL DEFAULT '{}',
+  progress REAL NOT NULL DEFAULT 0,
+  step TEXT,
+  step_index INTEGER NOT NULL DEFAULT 0,
+  step_total INTEGER NOT NULL DEFAULT 0,
+  cancel_requested INTEGER NOT NULL DEFAULT 0,
   created_at TEXT,
   started_at TEXT,
-  finished_at TEXT
+  finished_at TEXT,
+  updated_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS job_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  seq INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  payload TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_job_events_job ON job_events(job_id, seq);
 
 CREATE TABLE IF NOT EXISTS review_tasks (
   id TEXT PRIMARY KEY,
@@ -735,8 +774,37 @@ CREATE TABLE IF NOT EXISTS snapshots (
   table_name TEXT NOT NULL,
   row_id TEXT NOT NULL,
   before_json TEXT NOT NULL,
+  checkpoint_id TEXT REFERENCES checkpoints(id),
+  op TEXT NOT NULL DEFAULT 'update',
   created_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS checkpoints (
+  id TEXT PRIMARY KEY,
+  book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+  label TEXT NOT NULL,
+  origin TEXT NOT NULL DEFAULT 'node-rerun',
+  node TEXT,
+  created_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS staged_changes (
+  id TEXT PRIMARY KEY,
+  book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+  job_id TEXT REFERENCES jobs(id) ON DELETE CASCADE,
+  node TEXT NOT NULL,
+  group_key TEXT NOT NULL,
+  seq INTEGER NOT NULL,
+  table_name TEXT NOT NULL,
+  op TEXT NOT NULL,
+  row_id TEXT,
+  before_json TEXT,
+  after_json TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_staged_book ON staged_changes(book_id, job_id, status);
 
 CREATE INDEX IF NOT EXISTS idx_source_chapters_book ON source_chapters(book_id);
 CREATE INDEX IF NOT EXISTS idx_characters_book ON characters(book_id);
@@ -746,6 +814,34 @@ CREATE INDEX IF NOT EXISTS idx_voice_takes_beat ON voice_takes(beat_id);
 CREATE INDEX IF NOT EXISTS idx_timelines_book ON timelines(book_id, kind, version);
 CREATE INDEX IF NOT EXISTS idx_jobs_book ON jobs(book_id, node, status);
 CREATE INDEX IF NOT EXISTS idx_snapshots_book ON snapshots(book_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_checkpoints_book ON checkpoints(book_id, created_at);
   `);
+
+  // 增量迁移：老库补新列（SQLite 的 ALTER TABLE ADD COLUMN）
+  const columns = db.prepare(`PRAGMA table_info(snapshots)`).all().map((r) => (r as { name: string }).name);
+  if (!columns.includes("checkpoint_id")) {
+    db.exec(`ALTER TABLE snapshots ADD COLUMN checkpoint_id TEXT REFERENCES checkpoints(id)`);
+  }
+  if (!columns.includes("op")) {
+    db.exec(`ALTER TABLE snapshots ADD COLUMN op TEXT NOT NULL DEFAULT 'update'`);
+  }
+  // 新列就位后再建索引（老库上必须在 ALTER 之后）
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_snapshots_checkpoint ON snapshots(checkpoint_id)`);
+
+  // jobs 增量列（老库补列，P1 可观测执行）
+  const jobColumns = db.prepare(`PRAGMA table_info(jobs)`).all().map((r) => (r as { name: string }).name);
+  const jobAdds: Array<[string, string]> = [
+    ["progress", "progress REAL NOT NULL DEFAULT 0"],
+    ["step", "step TEXT"],
+    ["step_index", "step_index INTEGER NOT NULL DEFAULT 0"],
+    ["step_total", "step_total INTEGER NOT NULL DEFAULT 0"],
+    ["cancel_requested", "cancel_requested INTEGER NOT NULL DEFAULT 0"],
+    ["updated_at", "updated_at TEXT"],
+  ];
+  for (const [col, ddl] of jobAdds) {
+    if (!jobColumns.includes(col)) {
+      db.exec(`ALTER TABLE jobs ADD COLUMN ${ddl}`);
+    }
+  }
 }
 

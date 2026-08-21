@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { ErrorBanner } from "@/components/ui/error-banner";
+import { StatusPill } from "@/components/ui/status-badge";
+
 interface RenderJob {
   id: string;
   scope: string;
@@ -68,11 +71,7 @@ export default function RenderPage() {
         </h1>
       </header>
 
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
+      <ErrorBanner message={error} onDismiss={() => setError(null)} />
 
       <section className="rounded-xl border border-zinc-200 p-5 text-sm">
         <h2 className="font-semibold">M0 本地渲染</h2>
@@ -92,7 +91,8 @@ export default function RenderPage() {
         </div>
         {data.timeline && (
           <p className="mt-3 text-xs text-zinc-500">
-            preview timeline：{data.timeline.status} · {(data.timeline.duration_sec ?? 0).toFixed(1)}s
+            preview timeline：<StatusPill table="timelines" status={data.timeline.status} /> ·{" "}
+            {(data.timeline.duration_sec ?? 0).toFixed(1)}s
           </p>
         )}
       </section>
@@ -107,14 +107,14 @@ export default function RenderPage() {
               <li key={job.id} className="rounded-xl border border-zinc-200 p-4 text-sm">
                 <div className="flex items-center justify-between">
                   <p className="font-medium">
-                    {job.scope} · {job.status}
+                    {job.scope} · <StatusPill table="render_jobs" status={job.status} />
                     {job.duration_sec != null && (
                       <span className="ml-2 text-xs text-zinc-500">{job.duration_sec.toFixed(1)}s</span>
                     )}
                   </p>
                   <p className="text-xs text-zinc-400">{new Date(job.created_at).toLocaleString()}</p>
                 </div>
-                {job.error?.message && <p className="mt-1 text-xs text-red-600">{job.error.message}</p>}
+                {job.error?.message && <p className="mt-1 text-xs text-stale">{job.error.message}</p>}
                 {job.url && (
                   <a
                     href={job.url}

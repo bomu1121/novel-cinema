@@ -1,0 +1,28 @@
+import { NextResponse } from "next/server";
+import { appendEvent, createJobRow, sweepOrphanJobs, activeJobs } from "@/lib/jobs/progress";
+import { spawnWorker } from "@/lib/jobs/worker";
+
+const VALID_NODES = new Set(["analyze", "adapt", "assets-phase1", "assets-phase2", "storyboard", "voice"]);
+
+type Ctx = { params: Promise<{ bookId: string }> };
+
+/** 入队一个 AI 任务（立即返回 jobId，worker 子进程后台执行） */
+export async function POST(request: Request, ctx: Ctx) {
+  const { bookId } = await ctx.params;
+  const body = (await request.json().catch(() => ({}))) as { node?: string; input?: Record<string, unknown> };
+  if (!body.node || !VALID_NODES.has(body.node)) {
+    return NextResponse.json({ error: `未知节点: ${body.node}` }, { status: 400 });
+  }
+  sweepOrphanJobs();
+  const jobId = createJobRow(bookId, body.node, body.input ?? {});
+  appendEvent(jobId, "step", { label: "排队中", index: 0, total: 0 });
+  spawnWorker(jobId);
+  return NextResponse.json({ ok: true, jobId });
+}
+
+/** 本书 active 任务（刷新页面后恢复进度条用） */
+export async function GET(_request: Request, ctx: Ctx) {
+  const { bookId } = await ctx.params;
+  sweepOrphanJobs();
+  return NextResponse.json({ jobs: activeJobs(bookId) });
+}

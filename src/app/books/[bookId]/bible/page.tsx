@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { ErrorBanner } from "@/components/ui/error-banner";
+import { StatusPill } from "@/components/ui/status-badge";
+import { JobRunner } from "@/components/jobs/job-runner";
 
 interface StyleProposal {
   genre: string[];
@@ -52,8 +56,8 @@ export default function BiblePage() {
 
   const [data, setData] = useState<BibleData>({});
   const [error, setError] = useState<string | null>(null);
-  const [running, setRunning] = useState(false);
   const [approving, setApproving] = useState(false);
+  const [compareMode, setCompareMode] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -75,28 +79,6 @@ export default function BiblePage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
-
-  async function runAnalysis() {
-    setRunning(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/books/${bookId}/analyze`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setError(json.error ?? `分析失败（HTTP ${res.status}）`);
-        return;
-      }
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setRunning(false);
-    }
-  }
 
   async function approve(proposalIndex: number) {
     if (!data.styleBible) return;
@@ -134,20 +116,17 @@ export default function BiblePage() {
             {data.book?.title ?? "全书档案"} <span className="text-sm font-normal text-zinc-400">签核点 A</span>
           </h1>
         </div>
-        <button
-          onClick={runAnalysis}
-          disabled={running}
-          className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-        >
-          {running ? "AI 分析中…" : "运行单章分析"}
-        </button>
+        <JobRunner
+          bookId={bookId}
+          node="analyze"
+          label="运行单章分析"
+          disabled={approving}
+          onRunningChange={(r) => setApproving(r)}
+          onDone={() => void load()}
+        />
       </header>
 
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
+      <ErrorBanner message={error} />
 
       {summary && (
         <section className="rounded-xl border border-zinc-200 p-5">
@@ -195,31 +174,45 @@ export default function BiblePage() {
       )}
 
       <section className="space-y-6">
-        <h2 className="font-semibold">风格圣经候选（AI 提案，选定后锁定）</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold">风格圣经候选（AI 提案，选定后锁定）</h2>
+          {data.styleBible && data.styleBible.proposal_json?.length > 1 && (
+            <button
+              type="button"
+              onClick={() => setCompareMode((m) => !m)}
+              className="rounded border border-border bg-surface-2 px-2 py-1 text-xs text-text-muted hover:bg-surface-3"
+            >
+              {compareMode ? "退出对比（纵向）" : "左右对比"}
+            </button>
+          )}
+        </div>
         {!data.styleBible && (
           <p className="text-sm text-zinc-400">还没有候选，点右上角“运行单章分析”生成。</p>
         )}
-        {data.styleBible?.proposal_json?.map((p, i) => (
-          <div
-            key={i}
-            className={`rounded-xl border p-5 text-sm ${
-              data.styleBible?.approved_proposal_index === i
-                ? "border-emerald-400 bg-emerald-50"
-                : "border-zinc-200"
-            }`}
-          >
+        <div className={compareMode ? "grid gap-4 lg:grid-cols-3" : "space-y-4"}>
+          {data.styleBible?.proposal_json?.map((p, i) => (
+            <div
+              key={i}
+              className={`rounded-xl border p-5 text-sm ${
+                data.styleBible?.approved_proposal_index === i
+                  ? "border-approved/40 bg-approved/10"
+                  : "border-zinc-200"
+              }`}
+            >
             <div className="flex items-center justify-between">
               <h3 className="font-semibold">方案 {i + 1}</h3>
               {data.styleBible?.approved_proposal_index === i ? (
-                <span className="rounded-full bg-emerald-600 px-3 py-1 text-xs text-white">已批准</span>
+                <StatusPill table="style_bibles" status="approved" />
               ) : (
-                <button
+                <Button
+                  size="sm"
+                  variant="approve"
                   onClick={() => approve(i)}
                   disabled={approving}
-                  className="rounded-lg border border-zinc-300 px-3 py-1 text-xs hover:border-zinc-900 disabled:opacity-50"
+                  loading={approving}
                 >
                   批准这套
-                </button>
+                </Button>
               )}
             </div>
             <p className="mt-3 font-mono text-xs leading-5 text-zinc-700">{p.visual_style}</p>
@@ -246,6 +239,7 @@ export default function BiblePage() {
             )}
           </div>
         ))}
+        </div>
       </section>
     </main>
   );

@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { ErrorBanner } from "@/components/ui/error-banner";
+import { StatusPill } from "@/components/ui/status-badge";
+import { JobRunner } from "@/components/jobs/job-runner";
 
 interface AssetRow {
   id: string;
@@ -40,7 +44,8 @@ export default function AssetsPage() {
 
   const [data, setData] = useState<AssetsData>({ assets: [], plan: {} });
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"phase1" | "phase2" | null>(null);
+  // busy 仅用于批准类操作；生成走 JobRunner（任务级进度 + 可取消）
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -62,31 +67,6 @@ export default function AssetsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
-
-  async function generate(phase: "phase1" | "phase2") {
-    setBusy(phase);
-    setError(null);
-    try {
-      const res = await fetch(`/api/books/${bookId}/assets/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phase }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setError(json.error ?? `生成失败（HTTP ${res.status}）`);
-        return;
-      }
-      if (json.errors?.length) {
-        setError(`部分生成失败：${json.errors.join("；")}`);
-      }
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(null);
-    }
-  }
 
   async function approve(assetId: string) {
     try {
@@ -123,32 +103,31 @@ export default function AssetsPage() {
             资产库 <span className="text-sm font-normal text-zinc-400">签核点 C</span>
           </h1>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => generate("phase1")}
-            disabled={busy !== null || phase1Ready === 0}
-            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-          >
-            {busy === "phase1" ? "生成中…" : `生成设定图与背景（${phase1Ready}）`}
-          </button>
-          <button
-            onClick={() => generate("phase2")}
-            disabled={busy !== null || phase2Ready === 0}
-            className="rounded-lg border border-zinc-900 px-4 py-2 text-sm font-medium disabled:opacity-50"
-          >
-            {busy === "phase2" ? "生成中…" : `生成表情变体（${phase2Ready}）`}
-          </button>
+        <div className="flex flex-wrap gap-2">
+          <JobRunner
+            bookId={bookId}
+            node="assets-phase1"
+            label={`生成设定图与背景（${phase1Ready}）`}
+            disabled={phase1Ready === 0}
+            onRunningChange={setBusy}
+            onDone={() => void load()}
+          />
+          <JobRunner
+            bookId={bookId}
+            node="assets-phase2"
+            label={`生成表情变体（${phase2Ready}）`}
+            variant="secondary"
+            disabled={busy || phase2Ready === 0}
+            onRunningChange={setBusy}
+            onDone={() => void load()}
+          />
         </div>
       </header>
 
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
+      <ErrorBanner message={error} onDismiss={() => setError(null)} />
 
       {data.plan.error && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+        <div className="rounded-lg border border-regen/40 bg-regen/10 px-4 py-3 text-sm text-regen">
           生成清单暂不可用：{data.plan.error}（请先在“全书档案”页批准风格方案，并运行章节改编）
         </div>
       )}
@@ -183,18 +162,22 @@ export default function AssetsPage() {
                         {asset.title ?? asset.scene_key}
                       </p>
                       <p className="text-zinc-400">
-                        {asset.expression ?? asset.kind} · {asset.status}
+                        {asset.expression ?? asset.kind} · <StatusPill table="assets" status={asset.status} />
                       </p>
                       {asset.status === "candidate" && (
-                        <button
+                        <Button
+                          size="sm"
+                          variant="approve"
+                          className="w-full"
                           onClick={() => approve(asset.id)}
-                          className="w-full rounded-lg border border-emerald-600 px-2 py-1.5 text-emerald-700 hover:bg-emerald-50"
                         >
                           选这张
-                        </button>
+                        </Button>
                       )}
                       {asset.status === "approved" && (
-                        <p className="rounded-lg bg-emerald-50 px-2 py-1.5 text-center text-emerald-700">✓ 已批准</p>
+                        <p className="rounded-lg border border-approved/40 bg-approved/10 px-2 py-1.5 text-center text-approved">
+                          ✓ 已批准
+                        </p>
                       )}
                     </div>
                   </div>

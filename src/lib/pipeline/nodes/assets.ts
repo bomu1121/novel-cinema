@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { getSupabaseAdmin } from "@/lib/db";
+import { JobCancelledError, NOOP_REPORTER, type ProgressReporter } from "@/lib/jobs/types";
 import { r2Put, r2PublicUrl, r2SignedUrl } from "@/lib/r2";
 import { getImageProvider, type ImageKind } from "@/lib/providers/image";
 import {
@@ -289,14 +290,16 @@ async function fetchImageBytes(url: string): Promise<Uint8Array> {
   return new Uint8Array(await res.arrayBuffer());
 }
 
-/** A20/A30：执行某个 phase 的资产生成，候选全部落 assets（candidate 状态） */
-export async function generateAssetPhase(
+/** A20/A30：执行某个 phase 的资产生成，候选全部落 assets（candidate 状态） */export async function generateAssetPhase(
   bookId: string,
   phase: "phase1" | "phase2",
+  reporter?: ProgressReporter,
 ): Promise<{ generated: number; errors: string[] }> {
+  const r = reporter ?? NOOP_REPORTER;
   const plan = await listAssetPlan(bookId);
   const specs = (phase === "phase1" ? plan.phase1 : plan.phase2).filter((s) => !s.skipReason);
   if (specs.length === 0) {
+    r.step("无需生成（计划为空）", 0, 0);
     return { generated: 0, errors: [] };
   }
 
@@ -305,7 +308,13 @@ export async function generateAssetPhase(
   const errors: string[] = [];
   let generated = 0;
 
-  for (const spec of specs) {
+  for (const [specIdx, spec] of specs.entries()) {
+    r.step(
+      `生成 ${spec.kind === "expression" ? "表情" : "设定图"}：${spec.characterName ?? spec.sceneKey}`,
+      specIdx + 1,
+      specs.length,
+    );
+    if (r.checkCancelled()) throw new JobCancelledError();
     const { data: request, error: reqError } = await supabase
       .from("asset_requests")
       .insert({
@@ -412,6 +421,8 @@ export async function generateAssetPhase(
         .update({ status: "failed", error: { message }, finished_at: new Date().toISOString() })
         .eq("id", request.id);
     }
+
+    r.progress((specIdx + 1) / specs.length);
   }
 
   return { generated, errors };

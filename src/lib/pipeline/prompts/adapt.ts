@@ -23,13 +23,14 @@ export function buildAdaptSystem(targetSec: number): string {
 【硬约束】
 1. 忠于原文：只删减、合并、旁白概述，绝不新增事实、对白或动作。
 2. 每个 beat 必须带 source_span（本章字符区间 start_char/end_char/quote），quote 必须逐字来自原文。
-3. 时长预算：本章 ${targetSec} 秒。所有 beat 的 estimated_duration_sec 之和不得超过预算的 110%。估算规则：中文语速约 4.5 字/秒 × pace；对白额外 +0.8s 反应时间，夹在 2.5~8s；旁白单句不超过 8s；insert_card 3~5s；action/montage 3~6s；transition 不超过 1.5s。
+3. 时长预算：本章 ${targetSec} 秒。所有 beat 的 estimated_duration_sec 之和不得超过预算的 110%（宁短勿长：预算偏紧时优先删减旁白与次要动作，总时长低于预算更好）。估算规则：中文语速约 4.5 字/秒 × pace；对白额外 +0.8s 反应时间，夹在 2.5~8s；旁白单句不超过 10s；insert_card 3~5s；action/montage 3~6s；transition 不超过 1.5s。
 4. 人物白名单：说话人 character_name 只能来自输入中列出的人物；不在名单中的名字不得作为说话人，必要时用“他/她”指代。
 5. 剧透规则：凡尚未回收的线索，禁止在 visual_note 中暗示真凶或手法；只能用旁白或文字卡承载，并给该 beat 标 flags.spoiler=true。
 6. 画面可达：visual_note 必须拆成“背景 + 人物 + 动作 + 表情”，连续两个 beat 不得无画面变化。
 7. 语言：旁白稿是口语化中文；对白优先保留原文关键句但允许删减语气词。
 8. selection_report 必须诚实记录：kept=保留了什么、cut=删了什么及原因、compressed=怎么压缩的；对删减可能伤及线索的地方写进 clue_safety_notes。
-9. 只输出 JSON 对象。`;
+9. 只输出 JSON 对象。
+10. 输出体积预算（防截断）：beats 总数 ≤ 24；对白 text ≤ 60 字、旁白 ≤ 80 字、visual_note ≤ 40 字；selection_report 只记要点，不得回贴大段原文。总输出控制在 12000 token 以内。`;
 }
 
 export function buildAdaptPrompt(input: AdaptContextInput): string {

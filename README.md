@@ -10,6 +10,9 @@
 - [docs/01-data-model-v0.md](docs/01-data-model-v0.md) — 数据模型 v0
 - [docs/02-pipeline-v0.md](docs/02-pipeline-v0.md) — 流水线定义 v0（节点/提示词/校验/重试）
 - [docs/03-m0-roadmap.md](docs/03-m0-roadmap.md) — M0 任务拆分与验收标准
+- [docs/04-interaction-redesign.md](docs/04-interaction-redesign.md) — 交互重设计方案 v1（画布 + 检查器 + 命令面板）
+- [docs/05-overlap-transitions.md](docs/05-overlap-transitions.md) — 转场与叠化
+- [docs/06-ui-optimization-plan.md](docs/06-ui-optimization-plan.md) — **UI 优化方案 v2**（04 的超集：agentic 交互原语移植 + 组件规格 + Skill 清单 + 验证闭环）
 
 ## 技术栈（本地单机版）
 

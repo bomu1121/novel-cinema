@@ -1,4 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { getSupabaseAdmin } from "@/lib/db";
+import { createCheckpoint, revertCheckpoint, type SnapshotEntry } from "@/lib/checkpoints";
+import { JobCancelledError, NOOP_REPORTER, type ProgressReporter } from "@/lib/jobs/types";
 import { resolveAssetUrl } from "@/lib/pipeline/nodes/assets";
 import type { Beat } from "@/lib/pipeline/schemas/adapt";
 
@@ -21,6 +24,8 @@ export interface LayerDraft {
   enter: string | null;
   exit: string | null;
   motion: Record<string, unknown>;
+  /** 占位 id：compute 阶段分配，staging 预览与落库共用 */
+  layerId?: string;
 }
 
 export interface ShotDraft {
@@ -35,6 +40,8 @@ export interface ShotDraft {
   transitionOut: string;
   backgroundAssetId: string | null;
   layers: LayerDraft[];
+  /** 占位 id：compute 阶段分配，staging 预览与落库共用 */
+  shotId?: string;
 }
 
 interface StoryboardContext {
@@ -317,6 +324,8 @@ export interface BuildStoryboardResult {
   adaptedChapterId: string;
   timelineId: string;
   durationSec: number;
+  /** 重建前的回滚检查点（无旧镜头时为 null）——可撤销承诺的真实依据 */
+  checkpointId: string | null;
   shots: Array<{
     id: string;
     beatIdx: number;
@@ -338,13 +347,28 @@ export interface BuildStoryboardResult {
   }>;
 }
 
-/** 构建 + 落库分镜，并生成 preview 版 timeline 快照 */
-export async function buildStoryboard(
+export interface StoryboardCompute {
+  chapter: { id: string; source_chapter_id: string; title: string | null; target_duration_sec: number; status: string };
+  beats: BeatRow[];
+  ctx: Awaited<ReturnType<typeof loadAssets>>;
+  drafts: ShotDraft[];
+  durationSec: number;
+  snapshot: Record<string, unknown>;
+}
+
+/**
+ * 计算分镜（不落库）：章节/资源 → 镜头草稿（含占位 id）→ preview 快照。
+ * buildStoryboard（直接落库）与 staging 预览共用。
+ */
+export async function computeStoryboard(
   bookId: string,
   adaptedChapterId?: string,
-): Promise<BuildStoryboardResult> {
+  reporter?: ProgressReporter,
+): Promise<StoryboardCompute> {
+  const r = reporter ?? NOOP_REPORTER;
   const supabase = getSupabaseAdmin();
 
+  r.step("读取改编脚本与资源", 1, 4);
   let chapterQuery = supabase
     .from("adapted_chapters")
     .select("id, source_chapter_id, title, target_duration_sec, status")
@@ -369,16 +393,9 @@ export async function buildStoryboard(
   if (ctx.backgrounds.length === 0 && beats.some((b) => b.type !== "insert_card" && b.type !== "transition")) {
     throw new Error("还没有已批准的背景图。请先到资产库完成 phase1 并点选背景。");
   }
+  if (r.checkCancelled()) throw new JobCancelledError();
 
-  // 幂等：重跑先清掉本章旧 shots/layers
-  const beatIds = beats.map((b) => b.id);
-  const { data: oldShots } = await supabase.from("shots").select("id").in("beat_id", beatIds);
-  const oldShotIds = (oldShots ?? []).map((s: { id: string }) => s.id);
-  if (oldShotIds.length > 0) {
-    await supabase.from("shot_layers").delete().in("shot_id", oldShotIds);
-    await supabase.from("shots").delete().in("id", oldShotIds);
-  }
-
+  r.step("构建分镜与图层", 2, 4);
   const drafts: ShotDraft[] = mergeDuplicateShots(
     (() => {
       const list: ShotDraft[] = [];
@@ -405,58 +422,25 @@ export async function buildStoryboard(
     }
   }
 
-  const inserted: Array<{ id: string; draft: ShotDraft }> = [];
+  // 分配占位 id：staging 预览与最终落库使用同一批 id（快照可直接复用）
   for (const draft of drafts) {
-    const { data: shot, error } = await supabase
-      .from("shots")
-      .insert({
-        book_id: bookId,
-        beat_id: draft.beatId,
-        idx: draft.idx,
-        description: draft.description,
-        camera: draft.camera,
-        duration_sec: draft.durationSec,
-        transition_in: draft.transitionIn,
-        transition_out: draft.transitionOut,
-        background_asset_id: draft.backgroundAssetId,
-        style: {},
-        status: "draft",
-      })
-      .select("id")
-      .single();
-    if (error) throw error;
-
-    const layers = draft.layers.map((layer, layerIdx) => ({
-      shot_id: shot.id,
-      idx: layerIdx,
-      z: layerIdx,
-      kind: layer.kind,
-      character_id: layer.characterId,
-      asset_id: layer.assetId,
-      expression: layer.expression,
-      rect: layer.rect,
-      enter_animation: layer.enter,
-      exit_animation: layer.exit,
-      motion: layer.motion,
-      locked: false,
-    }));
-    if (layers.length > 0) {
-      await supabase.from("shot_layers").insert(layers);
+    draft.shotId = draft.shotId ?? randomUUID();
+    for (const layer of draft.layers) {
+      layer.layerId = layer.layerId ?? randomUUID();
     }
-    inserted.push({ id: shot.id, draft });
   }
 
   const durationSec = Number(drafts.reduce((s, d) => s + d.durationSec, 0).toFixed(2));
 
   // 生成 preview 快照（渲染的唯一事实来源；预览 URL 用当前签名地址）
-  const snapshot = {
+  const snapshot: Record<string, unknown> = {
     version: 1,
     kind: "preview",
     resolution: [1920, 1080],
     fps: 25,
     duration_sec: durationSec,
-    tracks: drafts.map((d, i) => ({
-      shotId: inserted[i]?.id,
+    tracks: drafts.map((d) => ({
+      shotId: d.shotId,
       beatId: d.beatId,
       beatIdx: d.beatIdx,
       text: d.text,
@@ -487,65 +471,164 @@ export async function buildStoryboard(
     })),
   };
 
-  const { data: timeline, error: timelineError } = await supabase
-    .from("timelines")
-    .insert({
-      book_id: bookId,
-      kind: "preview",
-      version: 1,
-      duration_sec: durationSec,
-      snapshot,
-      status: "draft",
-    })
-    .select("id")
-    .single();
-  if (timelineError) throw timelineError;
-
-  const resultShots = inserted.map(({ id, draft }) => ({
-    id,
-    beatIdx: draft.beatIdx,
-    idx: draft.idx,
-    description: draft.description,
-    camera: draft.camera,
-    durationSec: draft.durationSec,
-    transitionIn: draft.transitionIn,
-    transitionOut: draft.transitionOut,
-    backgroundUrl:
-      draft.backgroundAssetId != null
-        ? ctx.backgrounds.find((b) => b.id === draft.backgroundAssetId)?.url ?? null
-        : null,
-    layers: draft.layers.map((layer) => ({
-      id: `${id}:${layer.kind}`,
-      kind: layer.kind,
-      assetUrl: layer.assetId
-        ? [...ctx.refsByCharacter.values(), ...ctx.expressionsByKey.values()].find((a) => a.id === layer.assetId)?.url ?? null
-        : null,
-      expression: layer.expression,
-      rect: layer.rect,
-      motion: layer.motion,
-    })),
-  }));
-
-  return {
-    adaptedChapterId: chapter.id,
-    timelineId: timeline.id,
-    durationSec,
-    shots: resultShots,
-  };
+  return { chapter, beats, ctx, drafts, durationSec, snapshot };
 }
 
-/** 签核 D：批准最新 preview timeline */
+/** 构建 + 落库分镜，并生成 preview 版 timeline 快照 */
+export async function buildStoryboard(
+  bookId: string,
+  adaptedChapterId?: string,
+  reporter?: ProgressReporter,
+): Promise<BuildStoryboardResult> {
+  const r = reporter ?? NOOP_REPORTER;
+  const supabase = getSupabaseAdmin();
+
+  const computed = await computeStoryboard(bookId, adaptedChapterId, r);
+  const { chapter, beats, ctx, drafts, durationSec, snapshot } = computed;
+
+  // 幂等：重跑先清掉本章旧 shots/layers —— 清空前建 checkpoint（docs/06 P0：修复"可撤销"谎言）
+  const beatIds = beats.map((b) => b.id);
+  const { data: oldShots } = await supabase.from("shots").select("*").in("beat_id", beatIds);
+  const oldShotIds = (oldShots ?? []).map((s: { id: string }) => s.id);
+  let checkpointId: string | null = null;
+  if (oldShotIds.length > 0) {
+    const { data: oldLayers } = await supabase.from("shot_layers").select("*").in("shot_id", oldShotIds);
+    const entries: SnapshotEntry[] = [
+      ...(oldShots ?? []).map((s: Record<string, unknown>) => ({ table: "shots", rowId: s.id as string, before: s, op: "delete" as const })),
+      ...(oldLayers ?? []).map((l: Record<string, unknown>) => ({ table: "shot_layers", rowId: l.id as string, before: l, op: "delete" as const })),
+    ];
+    checkpointId = createCheckpoint(bookId, `重建分镜前（${oldShotIds.length} 镜头）`, "node-rerun", "storyboard", entries);
+    await supabase.from("shot_layers").delete().in("shot_id", oldShotIds);
+    await supabase.from("shots").delete().in("id", oldShotIds);
+  }
+
+  const insertedIds: string[] = [];
+  let timelineId: string | null = null;
+  try {
+    r.step("落库镜头与图层", 3, 4);
+    for (const draft of drafts) {
+      const shotId = draft.shotId!;
+      const { error: shotError } = await supabase.from("shots").insert({
+        id: shotId,
+        book_id: bookId,
+        beat_id: draft.beatId,
+        idx: draft.idx,
+        description: draft.description,
+        camera: draft.camera,
+        duration_sec: draft.durationSec,
+        transition_in: draft.transitionIn,
+        transition_out: draft.transitionOut,
+        background_asset_id: draft.backgroundAssetId,
+        style: {},
+        status: "draft",
+      });
+      if (shotError) throw shotError;
+
+      const layers = draft.layers.map((layer, layerIdx) => ({
+        id: layer.layerId!,
+        shot_id: shotId,
+        idx: layerIdx,
+        z: layerIdx,
+        kind: layer.kind,
+        character_id: layer.characterId,
+        asset_id: layer.assetId,
+        expression: layer.expression,
+        rect: layer.rect,
+        enter_animation: layer.enter,
+        exit_animation: layer.exit,
+        motion: layer.motion,
+        locked: false,
+      }));
+      if (layers.length > 0) {
+        const { error: layersError } = await supabase.from("shot_layers").insert(layers);
+        if (layersError) throw layersError;
+      }
+      insertedIds.push(shotId);
+    }
+
+    r.step("生成预览快照", 4, 4);
+    const { data: timeline, error: timelineError } = await supabase
+      .from("timelines")
+      .insert({
+        book_id: bookId,
+        kind: "preview",
+        version: 1,
+        duration_sec: durationSec,
+        snapshot,
+        status: "draft",
+      })
+      .select("id")
+      .single();
+    if (timelineError) throw timelineError;
+    timelineId = timeline.id;
+
+    const resultShots = drafts.map((draft) => ({
+      id: draft.shotId!,
+      beatIdx: draft.beatIdx,
+      idx: draft.idx,
+      description: draft.description,
+      camera: draft.camera,
+      durationSec: draft.durationSec,
+      transitionIn: draft.transitionIn,
+      transitionOut: draft.transitionOut,
+      backgroundUrl:
+        draft.backgroundAssetId != null
+          ? ctx.backgrounds.find((b) => b.id === draft.backgroundAssetId)?.url ?? null
+          : null,
+      layers: draft.layers.map((layer) => ({
+        id: `${draft.shotId}:${layer.kind}`,
+        kind: layer.kind,
+        assetUrl: layer.assetId
+          ? [...ctx.refsByCharacter.values(), ...ctx.expressionsByKey.values()].find((a) => a.id === layer.assetId)?.url ?? null
+          : null,
+        expression: layer.expression,
+        rect: layer.rect,
+        motion: layer.motion,
+      })),
+    }));
+
+    return {
+      adaptedChapterId: chapter.id,
+      timelineId: timeline.id,
+      durationSec,
+      shots: resultShots,
+      checkpointId,
+    };
+  } catch (err) {
+    // 失败即回滚：先清掉本次已插入的 shots/layers，再恢复被删除的旧数据
+    if (insertedIds.length > 0) {
+      await supabase.from("shot_layers").delete().in("shot_id", insertedIds);
+      await supabase.from("shots").delete().in("id", insertedIds);
+    }
+    if (timelineId) {
+      await supabase.from("timelines").delete().eq("id", timelineId);
+    }
+    if (checkpointId) {
+      try {
+        revertCheckpoint(bookId, checkpointId);
+      } catch (rollbackErr) {
+        console.error("[storyboard] 回滚 checkpoint 失败:", rollbackErr);
+      }
+    }
+    throw err;
+  }
+}
+
+/** 签核 D：批准最新 preview timeline（批准前建 checkpoint，可回滚到批准前） */
 export async function approveStoryboard(bookId: string): Promise<void> {
   const supabase = getSupabaseAdmin();
   const { data: timeline } = await supabase
     .from("timelines")
-    .select("id")
+    .select("*")
     .eq("book_id", bookId)
     .eq("kind", "preview")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (!timeline) throw new Error("还没有 preview timeline，请先构建分镜");
+  createCheckpoint(bookId, `批准分镜（${timeline.duration_sec ?? "?"}s）`, "approve", "approve:storyboard", [
+    { table: "timelines", rowId: timeline.id, before: timeline, op: "update" },
+  ]);
   await supabase.from("timelines").update({ status: "approved" }).eq("id", timeline.id);
 }
 

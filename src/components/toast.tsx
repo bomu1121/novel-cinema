@@ -27,6 +27,14 @@ export function useToast(): ToastContextValue {
   return ctx;
 }
 
+/** 语义色（令牌，docs/06 §5.1） */
+const TYPE_STYLE: Record<ToastItem["type"], string> = {
+  success: "border-approved/40 bg-approved/10 text-approved",
+  error: "border-stale/40 bg-stale/10 text-stale",
+  progress: "border-review/40 bg-review/10 text-review",
+  info: "border-border-strong bg-surface-2 text-text-muted",
+};
+
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
   const nextId = useRef(1);
@@ -51,37 +59,49 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed right-4 top-4 z-[100] flex w-80 flex-col gap-2">
+      {/* WCAG 4.1.3 状态消息：polite 播报；错误条目用 role="alert" 覆盖为 assertive */}
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="false"
+        className="pointer-events-none fixed right-4 top-4 z-[100] flex w-80 flex-col gap-2"
+      >
         {items.map((t) => (
           <div
             key={t.id}
-            className={`pointer-events-auto flex items-start justify-between rounded-xl border px-3 py-2 text-sm shadow-lg ${
-              t.type === "success"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                : t.type === "error"
-                  ? "border-red-200 bg-red-50 text-red-700"
-                  : t.type === "progress"
-                    ? "border-blue-200 bg-blue-50 text-blue-700"
-                    : "border-zinc-200 bg-white text-zinc-700"
-            }`}
+            role={t.type === "error" ? "alert" : "status"}
+            className={`pointer-events-auto flex items-start justify-between gap-2 rounded-xl border px-3 py-2 text-sm shadow-card ${TYPE_STYLE[t.type]}`}
           >
-            <span className="flex-1">
-              {t.type === "progress" && <span className="mr-1 inline-block h-2 w-2 animate-pulse rounded-full bg-blue-500" />}
+            <span className="min-w-0 flex-1">
+              {t.type === "progress" && (
+                <span
+                  aria-hidden
+                  className="mr-1 inline-block h-2 w-2 animate-pulse rounded-full bg-current"
+                />
+              )}
               {t.message}
             </span>
-            <span className="ml-2 flex items-center gap-2">
+            <span className="flex shrink-0 items-center gap-1.5">
               {t.action && (
                 <button
+                  type="button"
                   onClick={() => {
                     t.action?.onAction();
                     dismiss(t.id);
                   }}
-                  className="rounded border border-current px-1.5 py-0.5 text-xs font-medium hover:opacity-70"
+                  className="min-h-6 min-w-6 rounded-md border border-current/40 px-2 text-xs font-medium hover:bg-current/10"
                 >
                   {t.action.label}
                 </button>
               )}
-              <button onClick={() => dismiss(t.id)} className="text-xs opacity-50 hover:opacity-100">×</button>
+              <button
+                type="button"
+                aria-label="关闭通知"
+                onClick={() => dismiss(t.id)}
+                className="flex min-h-6 min-w-6 items-center justify-center rounded-md text-base leading-none opacity-50 hover:bg-current/10 hover:opacity-100"
+              >
+                ×
+              </button>
             </span>
           </div>
         ))}

@@ -1,8 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { getSupabaseAdmin } from "@/lib/db";
+import { createCheckpoint, latestCheckpointId, revertCheckpoint } from "@/lib/checkpoints";
+import { JobCancelledError, NOOP_REPORTER, type ProgressReporter } from "@/lib/jobs/types";
+import { persistReviewTasks, handleAdaptationFailure } from "@/lib/review";
+import { AdaptationValidationError, runAdaptation } from "@/lib/pipeline/nodes/adapt";
 import { resolveAssetUrl } from "@/lib/pipeline/nodes/assets";
 import { analyzeChapter, persistChapterAnalysis, persistStyleProposals, proposeStyleBibles } from "@/lib/pipeline/nodes/analyze";
-import { runAdaptation } from "@/lib/pipeline/nodes/adapt";
 import { generateAssetPhase } from "@/lib/pipeline/nodes/assets";
 import { buildStoryboard } from "@/lib/pipeline/nodes/storyboard";
 import { generateVoiceTakes } from "@/lib/pipeline/nodes/voice";
@@ -137,34 +140,48 @@ export async function patchWorkbenchRow(
     if (!row || row.book_id !== bookId) throw new Error("记录不属于本书");
   }
 
-  // 撤销快照（I0）：保存修改前的完整行
+  // 撤销快照（I0 升级版）：保存修改前的完整行，并归属到一个 checkpoint（docs/06 §4.4）
   let snapshotId: string | null = null;
   const before = await s.from(table).select("*").eq("id", id).single();
   if (before.data) {
-    const snap = await s
-      .from("snapshots")
-      .insert({ book_id: bookId, table_name: table, row_id: id, before_json: before.data })
-      .select("id")
-      .single();
-    snapshotId = snap.data?.id ?? null;
+    snapshotId = createCheckpoint(bookId, `手动编辑「${table}」`, "manual-edit", undefined, [
+      { table, rowId: id, before: before.data as Record<string, unknown>, op: "update" },
+    ]);
   }
 
   const { error } = await s.from(table).update(patch).eq("id", id);
   if (error) {
-    if (snapshotId) await s.from("snapshots").delete().eq("id", snapshotId);
+    if (snapshotId) {
+      // snapshotId 现在指向 checkpoint：连同其快照一起消费掉
+      try {
+        revertCheckpoint(bookId, snapshotId);
+      } catch {
+        /* 回滚失败不掩盖原始错误 */
+      }
+    }
     throw new Error(error.message ?? "更新失败");
   }
   await propagateStale(bookId, table, id);
   return { snapshotId };
 }
 
-/** 撤销最近一次编排修改（I0） */
+/** 撤销最近一次可撤销操作（I0 升级版）：优先回滚最新 checkpoint，兼容历史单快照 */
 export async function undoLatest(bookId: string): Promise<{ table: string; rowId: string }> {
   const s = getSupabaseAdmin();
+
+  // 新语义：回滚最新 checkpoint（含重跑分镜的整批覆盖 / 手动编辑）
+  const latestCpId = latestCheckpointId(bookId);
+  if (latestCpId) {
+    const result = revertCheckpoint(bookId, latestCpId);
+    return { table: `checkpoint:${result.label}`, rowId: latestCpId };
+  }
+
+  // 兼容旧数据：无 checkpoint 的历史单快照
   const { data: snap } = await s
     .from("snapshots")
     .select("id, table_name, row_id, before_json")
     .eq("book_id", bookId)
+    .is("checkpoint_id", null)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -264,18 +281,24 @@ async function propagateStale(bookId: string, table: string, id: string): Promis
 
 export type RerunNode = "analyze" | "adapt" | "assets-phase1" | "assets-phase2" | "storyboard" | "voice";
 
-/** 单节点重跑（人工编排的核心操作） */
-export async function rerunNode(bookId: string, node: RerunNode) {
+/** 单节点重跑（人工编排的核心操作；reporter 可选，worker 进程内注入进度） */
+export async function rerunNode(
+  bookId: string,
+  node: RerunNode,
+  reporter?: ProgressReporter,
+  input: { chapterId?: string } = {},
+) {
   const s = getSupabaseAdmin();
+  const r = reporter ?? NOOP_REPORTER;
   switch (node) {
     case "analyze": {
-      const { data: chapter } = await s
-        .from("source_chapters")
-        .select("id, idx, title, cleaned_text")
-        .eq("book_id", bookId)
-        .eq("idx", 1)
-        .single();
+      r.step("读取章节", 1, 3);
+      let analyzeQuery = s.from("source_chapters").select("id, idx, title, cleaned_text").eq("book_id", bookId);
+      analyzeQuery = input.chapterId ? analyzeQuery.eq("id", input.chapterId) : analyzeQuery.eq("idx", 1);
+      const { data: chapter } = await analyzeQuery.single();
       if (!chapter) throw new Error("没有 idx=1 的章节");
+      if (r.checkCancelled()) throw new JobCancelledError();
+      r.step("AI 分析全文", 2, 3);
       const analysis = await analyzeChapter(bookId, {
         id: chapter.id,
         idx: chapter.idx,
@@ -283,28 +306,56 @@ export async function rerunNode(bookId: string, node: RerunNode) {
         cleanedText: chapter.cleaned_text,
       });
       await persistChapterAnalysis(bookId, chapter, analysis);
+      r.step("生成风格候选", 3, 3);
       const proposals = await proposeStyleBibles(bookId, analysis, null);
       const styleBibleId = await persistStyleProposals(bookId, proposals);
       return { styleBibleId, recommendedIndex: proposals.recommended_index };
     }
     case "adapt": {
-      const { data: chapter } = await s
-        .from("source_chapters")
-        .select("id, idx, title, cleaned_text")
-        .eq("book_id", bookId)
-        .eq("idx", 1)
-        .single();
+      r.step("读取章节", 1, 2);
+      let adaptQuery = s.from("source_chapters").select("id, idx, title, cleaned_text").eq("book_id", bookId);
+      adaptQuery = input.chapterId ? adaptQuery.eq("id", input.chapterId) : adaptQuery.eq("idx", 1);
+      const { data: chapter } = await adaptQuery.single();
       if (!chapter) throw new Error("没有 idx=1 的章节");
-      const result = await runAdaptation(bookId, chapter);
+      if (r.checkCancelled()) throw new JobCancelledError();
+      r.step("AI 改编并自检", 2, 2);
+      // 注意：runAdaptation 需要 camelCase（cleanedText），DB 行是 snake_case（cleaned_text）
+      let result;
+      try {
+        result = await runAdaptation(
+          bookId,
+          { id: chapter.id, idx: chapter.idx, title: chapter.title, cleanedText: chapter.cleaned_text },
+          r,
+        );
+      } catch (err) {
+        // 重试耗尽降级：诊断写入待审收件箱（docs/06 附录 F）
+        if (err instanceof AdaptationValidationError) {
+          throw new Error(await handleAdaptationFailure(bookId, err));
+        }
+        throw err;
+      }
+      // 自检红项持久化为待审收件箱任务（docs/06 §6.2）
+      const reds = (result.review.items ?? [])
+        .filter((i) => i.severity === "red")
+        .map((i) => ({
+          beatIdx: i.beat_idx,
+          severity: i.severity,
+          kind: i.kind,
+          issue: i.issue,
+          suggestion: i.suggestion,
+        }));
+      if (reds.length > 0 && result.adaptedChapterId) {
+        await persistReviewTasks(bookId, "chapter_script", "adapted_chapters", result.adaptedChapterId, reds);
+      }
       return { adaptedChapterId: result.adaptedChapterId, beats: result.adapt.beats.length };
     }
     case "assets-phase1":
     case "assets-phase2":
-      return await generateAssetPhase(bookId, node === "assets-phase1" ? "phase1" : "phase2");
+      return await generateAssetPhase(bookId, node === "assets-phase1" ? "phase1" : "phase2", r);
     case "storyboard":
-      return await buildStoryboard(bookId);
+      return await buildStoryboard(bookId, undefined, r);
     case "voice":
-      return await generateVoiceTakes(bookId);
+      return await generateVoiceTakes(bookId, r);
     default:
       throw new Error(`未知节点: ${node}`);
   }

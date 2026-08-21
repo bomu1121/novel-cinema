@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ErrorBanner } from "@/components/ui/error-banner";
+import { StatusPill } from "@/components/ui/status-badge";
 
 interface ChapterSummary {
   id: string;
@@ -56,11 +58,7 @@ export default function BookDetailPage() {
         ← 返回项目列表
       </Link>
 
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
+      <ErrorBanner message={error} />
 
       {book && (
         <header>
@@ -117,8 +115,9 @@ export default function BookDetailPage() {
               </Link>
             </div>
           </div>
-          <p className="mt-1 text-sm text-zinc-500">
-            {book.total_chars.toLocaleString()} 字 · {chapters.length} 章 · 状态 {book.status}
+          <p className="mt-1 flex items-center gap-2 text-sm text-zinc-500">
+            {book.total_chars.toLocaleString()} 字 · {chapters.length} 章
+            <StatusPill table="books" status={book.status} />
           </p>
         </header>
       )}
@@ -133,8 +132,9 @@ export default function BookDetailPage() {
               {ch.kind === "front" ? "前言" : `第 ${ch.idx} 章`}
               {ch.title ? ` · ${ch.title}` : ""}
             </span>
-            <span className="text-zinc-500">
-              {ch.char_count.toLocaleString()} 字 · {ch.status}
+            <span className="flex items-center gap-2 text-zinc-500">
+              {ch.char_count.toLocaleString()} 字
+              <StatusPill table="source_chapters" status={ch.status} />
             </span>
           </li>
         ))}

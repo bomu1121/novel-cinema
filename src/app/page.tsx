@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { ErrorBanner } from "@/components/ui/error-banner";
+import { StatusPill } from "@/components/ui/status-badge";
 
 interface BookSummary {
   id: string;
@@ -106,37 +109,33 @@ export default function HomePage() {
           />
         </label>
 
-        <button
+        <Button
           type="submit"
           disabled={uploading}
-          className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          loading={uploading}
         >
-          {uploading ? "解析中…" : "上传并解析"}
-        </button>
+          上传并解析
+        </Button>
       </form>
 
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
+      <ErrorBanner message={error} />
 
       {result && (
-        <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-sm">
-          <h2 className="font-semibold text-emerald-900">解析完成</h2>
-          <p className="mt-1 text-emerald-800">
+        <section className="rounded-xl border border-approved/40 bg-approved/10 p-6 text-sm">
+          <h2 className="font-semibold text-approved">解析完成</h2>
+          <p className="mt-1 text-approved/80">
             编码：{result.encoding} · 章节数：{result.chapters?.length ?? 0}
           </p>
           {result.book && (
             <Link
               href={`/books/${result.book.id}`}
-              className="mt-3 inline-block rounded-lg bg-emerald-700 px-3 py-1.5 text-white"
+              className="mt-3 inline-block rounded-lg bg-approved px-3 py-1.5 text-white hover:bg-approved/85"
             >
               查看章节 →
             </Link>
           )}
           {result.warnings && result.warnings.length > 0 && (
-            <ul className="mt-3 list-disc space-y-1 pl-5 text-amber-700">
+            <ul className="mt-3 list-disc space-y-1 pl-5 text-regen">
               {result.warnings.map((w, i) => (
                 <li key={i}>{w}</li>
               ))}
@@ -148,7 +147,7 @@ export default function HomePage() {
       <section>
         <h2 className="mb-3 font-semibold">项目（books）</h2>
         {listError && (
-          <p className="mb-3 text-sm text-amber-700">
+          <p className="mb-3 text-sm text-regen">
             无法读取列表：{listError}（请检查 .env.local 中 SUPABASE_* 配置）
           </p>
         )}
@@ -160,8 +159,9 @@ export default function HomePage() {
                 className="flex items-center justify-between rounded-lg border border-zinc-200 px-4 py-3 text-sm hover:border-zinc-400"
               >
                 <span className="font-medium">{book.title}</span>
-                <span className="text-zinc-500">
-                  {book.total_chars.toLocaleString()} 字 · {book.status}
+                <span className="flex items-center gap-2 text-zinc-500">
+                  {book.total_chars.toLocaleString()} 字
+                  <StatusPill table="books" status={book.status} />
                 </span>
               </Link>
             </li>

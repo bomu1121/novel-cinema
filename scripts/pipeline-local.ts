@@ -95,8 +95,12 @@ async function main() {
   }
 
   if (args.approveAll || redItems.length === 0) {
-    await approveAdaptedChapter(adaptResult.adaptedChapterId);
-    console.log("签核 B：脚本已批准");
+    if (adaptResult.adaptedChapterId) {
+      await approveAdaptedChapter(adaptResult.adaptedChapterId);
+      console.log("签核 B：脚本已批准");
+    } else {
+      console.log("改编未落库（dryRun 结果），跳过签核 B");
+    }
   } else {
     console.log(`待签核 B：/books/${bookId}/script 处理红项后批准`);
     return;

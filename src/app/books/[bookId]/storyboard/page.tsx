@@ -4,6 +4,13 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { ErrorBanner } from "@/components/ui/error-banner";
+import { StatusPill } from "@/components/ui/status-badge";
+import { JobRunner } from "@/components/jobs/job-runner";
+import { StagedReviewPanel } from "@/components/jobs/staged-review-panel";
+import { useToast } from "@/components/toast";
+
 interface TrackLayer {
   kind: string;
   asset_url: string | null;
@@ -46,6 +53,7 @@ function cameraClass(camera: string): string {
 export default function StoryboardPage() {
   const params = useParams<{ bookId: string }>();
   const bookId = params.bookId;
+  const toast = useToast();
 
   const [data, setData] = useState<StoryboardData>({
     timeline: null,
@@ -56,6 +64,18 @@ export default function StoryboardPage() {
   const [busy, setBusy] = useState<"build" | "approve" | null>(null);
   const [durations, setDurations] = useState<Record<string, number>>({});
   const [backgrounds, setBackgrounds] = useState<Record<string, string>>({});
+  const [stagedJobId, setStagedJobId] = useState<string | null>(null);
+
+  // 挂载时接回未完成的审阅（刷新页面后恢复）
+  useEffect(() => {
+    fetch(`/api/books/${bookId}/staged`)
+      .then((r) => r.json())
+      .then((json) => {
+        const g = (json.groups ?? []).find((x: { node: string }) => x.node === "storyboard");
+        if (g?.jobId) setStagedJobId(g.jobId);
+      })
+      .catch(() => undefined);
+  }, [bookId]);
 
   const load = useCallback(async () => {
     try {
@@ -85,28 +105,6 @@ export default function StoryboardPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
-
-  async function build() {
-    setBusy("build");
-    setError(null);
-    try {
-      const res = await fetch(`/api/books/${bookId}/storyboard/build`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setError(json.error ?? `构建失败（HTTP ${res.status}）`);
-        return;
-      }
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(null);
-    }
-  }
 
   async function approve() {
     setBusy("approve");
@@ -162,35 +160,49 @@ export default function StoryboardPage() {
           </h1>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={build}
+          <JobRunner
+            bookId={bookId}
+            node="storyboard"
+            label="构建分镜"
             disabled={busy !== null}
-            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-          >
-            {busy === "build" ? "构建中…" : "构建分镜"}
-          </button>
+            onRunningChange={(r) => setBusy(r ? "build" : null)}
+            onDone={(jobId) => {
+              toast.push("info", "分镜已生成，进入逐条审阅（应用前不覆盖任何数据）", undefined);
+              setStagedJobId(jobId);
+            }}
+          />
           {data.timeline && data.timeline.status !== "approved" && (
-            <button
-              onClick={approve}
-              disabled={busy !== null}
-              className="rounded-lg border border-emerald-600 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
-            >
-              {busy === "approve" ? "批准中…" : "批准分镜"}
-            </button>
+            <Button variant="approve" onClick={approve} disabled={busy !== null} loading={busy === "approve"}>
+              批准分镜
+            </Button>
           )}
         </div>
       </header>
 
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
+      {stagedJobId && (
+        <StagedReviewPanel
+          bookId={bookId}
+          jobId={stagedJobId}
+          nodeLabel="分镜构建审阅"
+          onApplied={(result) => {
+            toast.push("success", `已应用 ${result.applied} 处变更（驳回 ${result.rejected}）`, undefined);
+            setStagedJobId(null);
+            void load();
+          }}
+          onDiscarded={() => {
+            toast.push("info", "已放弃本次构建，数据未改动", undefined);
+            setStagedJobId(null);
+            void load();
+          }}
+        />
       )}
+
+      <ErrorBanner message={error} />
 
       {data.timeline && (
         <p className="text-sm text-zinc-500">
           总时长 {(data.timeline.duration_sec ?? 0).toFixed(1)}s · {data.tracks.length} 个镜头 · 状态{" "}
-          {data.timeline.status}
+          <StatusPill table="timelines" status={data.timeline.status} />
         </p>
       )}
 

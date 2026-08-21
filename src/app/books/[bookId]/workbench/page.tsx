@@ -2,8 +2,21 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useToast } from "@/components/toast";
+import { Button } from "@/components/ui/button";
+import { ErrorBanner } from "@/components/ui/error-banner";
+import { StatusPill } from "@/components/ui/status-badge";
+import { JobStepList } from "@/components/jobs/job-step-list";
+import { StagedReviewPanel } from "@/components/jobs/staged-review-panel";
+import { PlanSheet } from "@/components/jobs/plan-sheet";
+import { ReviewInbox } from "@/components/jobs/review-inbox";
+import { TimeMachine } from "@/components/jobs/time-machine";
+import { CommandPalette } from "@/components/jobs/command-palette";
+import { CostMeter } from "@/components/cost-meter";
+import { useJob } from "@/lib/ui/use-job";
+import type { GraphNode } from "@/lib/pipeline/graph";
+import { CAMERAS, EMOTIONS, ENTER_EXIT, TRANSITIONS } from "@/lib/ui/enums";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -25,10 +38,6 @@ interface WorkbenchData {
   estimates?: Record<string, string>;
 }
 
-const ENTER_EXIT = ["none", "fade_in", "fade_out", "slide_left", "slide_right", "slide_up", "slide_down"];
-const CAMERAS = ["static", "ken_burns_in", "ken_burns_out", "pan_l", "pan_r", "push_in", "pull_out"];
-const TRANSITIONS = ["cut", "crossfade", "fade_in", "fade_out", "slide", "dip_to_black"];
-
 export default function WorkbenchPage() {
   const params = useParams<{ bookId: string }>();
   const bookId = params.bookId;
@@ -37,8 +46,63 @@ export default function WorkbenchPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<{ node: string; label: string } | null>(null);
+  const [rerunJobId, setRerunJobId] = useState<string | null>(null);
   const [edits, setEdits] = useState<Record<string, Record<string, unknown>>>({});
   const toast = useToast();
+  const rerunJob = useJob(bookId, rerunJobId);
+  // 记录最近一次重跑的节点（staging 节点完成后进入审阅而非直接刷新）
+  const [rerunNodeName, setRerunNodeName] = useState<string | null>(null);
+  const isStagedNode = rerunNodeName === "adapt" || rerunNodeName === "storyboard";
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // Cmd+K 命令面板
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === "k") {
+        ev.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const paletteItems = useMemo(() => {
+    const pages: Array<[string, string, string]> = [
+      ["bible", "全书档案 / 签核 A", `/books/${bookId}/bible`],
+      ["script", "改编脚本 / 签核 B", `/books/${bookId}/script`],
+      ["assets", "资产库 / 签核 C", `/books/${bookId}/assets`],
+      ["storyboard", "分镜时间轴 / 签核 D", `/books/${bookId}/storyboard`],
+      ["voice", "多角色配音 / 签核 E", `/books/${bookId}/voice`],
+      ["render", "渲染 / 签核 F", `/books/${bookId}/render`],
+      ["canvas", "分镜画布", `/books/${bookId}/canvas`],
+    ];
+    return [
+      ...pages.map(([id, label, href]) => ({
+        id: `page:${id}`,
+        label: `打开 ${label}`,
+        hint: "页面",
+        run: () => {
+          window.location.href = href;
+        },
+      })),
+      ...(
+        [
+          ["analyze", "① 分析+风格候选"],
+          ["adapt", "② 改编脚本"],
+          ["assets-phase1", "③a 设定图+背景"],
+          ["assets-phase2", "③b 表情变体"],
+          ["storyboard", "④ 分镜"],
+          ["voice", "⑤ 配音"],
+        ] as const
+      ).map(([node, label]) => ({
+        id: `rerun:${node}`,
+        label: `重跑 ${label}`,
+        hint: "重跑",
+        run: () => rerun(node, label),
+      })),
+    ];
+  }, [bookId]);
 
   async function undo() {
     try {
@@ -71,6 +135,36 @@ export default function WorkbenchPage() {
     // 挂载后拉取编排台；setState 均在异步回调内
     void load();
   }, [load]);
+
+  // 时间机器回滚等跨组件数据变更后刷新
+  useEffect(() => {
+    const handler = () => void load();
+    window.addEventListener("novel-cinema:data-changed", handler);
+    return () => window.removeEventListener("novel-cinema:data-changed", handler);
+  }, [load]);
+
+  // 重跑任务收尾：staging 节点完成后进入审阅（保留 jobId）；其余刷新编排台
+  useEffect(() => {
+    if (rerunJob.status === "succeeded") {
+      if (isStagedNode) {
+        toast.push("info", "变更清单已生成，进入逐条审阅（应用前不覆盖任何数据）", undefined);
+        // 以下 setState 由 useJob 外部状态变化驱动，属订阅回调语义
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setConfirming(null);
+        return;
+      }
+      toast.push("success", "重跑完成，已刷新编排台", undefined);
+      setConfirming(null);
+      setRerunJobId(null);
+      void load();
+    } else if (rerunJob.status === "failed" || rerunJob.status === "cancelled") {
+      toast.push(rerunJob.status === "failed" ? "error" : "info", rerunJob.error ?? "任务已取消", undefined);
+      setRerunJobId(null);
+      setRerunNodeName(null);
+    }
+    // load/toast 随 bookId 变化而变，不应重触发任务收尾逻辑
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rerunJob.status, rerunJob.error]);
 
   function edit(key: string, field: string, value: unknown) {
     setEdits((prev) => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
@@ -135,27 +229,22 @@ export default function WorkbenchPage() {
   }
 
   async function executeRerun(node: string) {
-    setBusy(`rerun:${node}`);
     setError(null);
-    toast.push("progress", `正在重跑 ${node}…`, undefined);
     try {
-      const res = await fetch(`/api/books/${bookId}/workbench/rerun`, {
+      const res = await fetch(`/api/books/${bookId}/jobs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ node }),
       });
       const json = await res.json();
       if (!res.ok) {
-        toast.push("error", json.error ?? `重跑失败（HTTP ${res.status}）`);
+        toast.push("error", json.error ?? `入队失败（HTTP ${res.status}）`);
         return;
       }
-      toast.push("success", `重跑完成：${node}`, undefined);
-      await load();
+      setRerunNodeName(node);
+      setRerunJobId(json.jobId as string);
     } catch (err) {
       toast.push("error", err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(null);
-      setConfirming(null);
     }
   }
 
@@ -176,9 +265,13 @@ export default function WorkbenchPage() {
         </h1>
       </header>
 
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
-      )}
+      <ErrorBanner message={error} onDismiss={() => setError(null)} />
+
+      <CostMeter bookId={bookId} />
+      <ReviewInbox bookId={bookId} />
+      <TimeMachine bookId={bookId} />
+
+      <CommandPalette open={paletteOpen} items={paletteItems} onClose={() => setPaletteOpen(false)} />
 
       {/* 重跑按钮 */}
       <section className="rounded-xl border border-zinc-200 p-4">
@@ -194,42 +287,62 @@ export default function WorkbenchPage() {
               ["voice", "⑤ 配音"],
             ] as const
           ).map(([node, label]) => (
-            <button
+            <Button
               key={node}
+              size="sm"
+              variant="secondary"
               onClick={() => rerun(node, label)}
               disabled={busy !== null}
-              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs hover:border-zinc-900 disabled:opacity-50"
+              loading={busy === `rerun:${node}`}
             >
-              {busy === `rerun:${node}` ? "运行中…" : label}
-            </button>
+              {label}
+            </Button>
           ))}
         </div>
 
-        {confirming && (
-          <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-xs">
-            <p className="font-semibold text-blue-900">确认重跑「{confirming.label}」？</p>
-            <p className="mt-1 text-blue-800">{data?.estimates?.[confirming.node] ?? "影响与费用未知"}</p>
-            <div className="mt-2 flex gap-2">
-              <button
-                onClick={() => executeRerun(confirming.node)}
-                className="rounded-lg bg-blue-700 px-3 py-1.5 text-white"
-              >
-                执行
-              </button>
-              <button
-                onClick={() => setConfirming(null)}
-                className="rounded-lg border border-blue-300 px-3 py-1.5"
-              >
-                取消
-              </button>
+          {confirming && (
+            <div className="mt-3">
+              <PlanSheet
+                bookId={bookId}
+                node={confirming.node as GraphNode}
+                busy={rerunJob.status === "running" || rerunJob.status === "pending"}
+                onExecute={() => executeRerun(confirming.node)}
+                onCancel={() => setConfirming(null)}
+              />
+              {rerunJobId && (
+                <JobStepList
+                  className="mt-2"
+                  state={rerunJob}
+                  onCancel={() => void rerunJob.cancel()}
+                />
+              )}
             </div>
-          </div>
-        )}
+          )}
+          {isStagedNode && rerunJobId && rerunJob.status === "succeeded" && (
+            <StagedReviewPanel
+              bookId={bookId}
+              jobId={rerunJobId}
+              nodeLabel={`「${rerunNodeName}」变更审阅`}
+              className="mt-3"
+              onApplied={(result) => {
+                toast.push("success", `已应用 ${result.applied} 处变更（驳回 ${result.rejected}）`, undefined);
+                setRerunJobId(null);
+                setRerunNodeName(null);
+                void load();
+              }}
+              onDiscarded={() => {
+                toast.push("info", "已放弃本次变更，数据未改动", undefined);
+                setRerunJobId(null);
+                setRerunNodeName(null);
+                void load();
+              }}
+            />
+          )}
 
         <p className="mt-2 text-xs text-zinc-500">
           章节 {data?.chapters?.length ?? 0} · 人物 {data?.characters?.length ?? 0} · beats{" "}
           {data?.beats?.length ?? 0} · 镜头 {data?.shots?.length ?? 0} · 图层 {data?.layers?.length ?? 0} · 资产{" "}
-          {data?.assets?.length ?? 0} · timeline {data?.timeline?.status ?? "-"}
+          {data?.assets?.length ?? 0} · timeline <StatusPill table="timelines" status={data?.timeline?.status} />
         </p>
       </section>
 
@@ -341,7 +454,7 @@ export default function WorkbenchPage() {
                 onChange={(e) => edit(`beats:${b.id}`, "emotion", e.target.value)}
                 className="rounded border border-zinc-300 px-2 py-1.5"
               >
-                {["neutral", "calm", "happy", "sad", "angry", "fear", "surprise", "suspicious", "nervous", "pain", "determined", "whisper"].map((e) => (
+                {EMOTIONS.map((e) => (
                   <option key={e} value={e}>{e}</option>
                 ))}
               </select>
@@ -465,7 +578,7 @@ export default function WorkbenchPage() {
               />
               <button onClick={() => save("style_bibles", data.styleBible.id, data.styleBible)} className="rounded border px-3">保存</button>
             </div>
-            <p className="mt-1 text-zinc-500">narration_tone：{data.styleBible.narration_tone} · version {data.styleBible.version} · {data.styleBible.status}</p>
+            <p className="mt-1 text-zinc-500">narration_tone：{data.styleBible.narration_tone} · version {data.styleBible.version} · <StatusPill table="style_bibles" status={data.styleBible.status} /></p>
             <JsonDetails table="style_bibles" id={data.styleBible.id} row={data.styleBible} onSave={saveJson} />
           </div>
         )}
@@ -482,7 +595,7 @@ export default function WorkbenchPage() {
         <h2 className="font-semibold">资产 prompt（改后需重跑对应 phase 生成新候选）</h2>
         {data?.assets?.map((a) => (
           <div key={a.id} className="rounded-lg border border-zinc-200 p-3 text-xs">
-            <p className="font-medium">{a.kind} · {a.title ?? a.scene_key} · {a.status}</p>
+            <p className="font-medium">{a.kind} · {a.title ?? a.scene_key} · <StatusPill table="assets" status={a.status} /></p>
             <textarea
               value={String(cur(`assets:${a.id}`, a, "prompt") ?? "")}
               onChange={(e) => edit(`assets:${a.id}`, "prompt", e.target.value)}
