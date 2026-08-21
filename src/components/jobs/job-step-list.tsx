@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { UseJobState } from "@/lib/ui/use-job";
 
 /**
@@ -12,6 +13,8 @@ export interface JobStepListProps {
   state: UseJobState;
   onCancel?: () => void;
   className?: string;
+  /** 停滞阈值（毫秒），超过则显示停滞提示；默认 30s */
+  stallMs?: number;
 }
 
 function formatElapsed(ms: number): string {
@@ -21,11 +24,21 @@ function formatElapsed(ms: number): string {
   return `${Math.floor(s / 60)}m${s % 60}s`;
 }
 
-export function JobStepList({ state, onCancel, className = "" }: JobStepListProps) {
+export function JobStepList({ state, onCancel, className = "", stallMs = 30000 }: JobStepListProps) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   if (state.status === "idle" || !state.jobId) return null;
 
   const hasRatio = state.stepTotal > 0 && state.stepIndex > 0;
   const percent = state.progress > 0 ? Math.round(state.progress * 100) : null;
+  const stalled =
+    state.status === "running" &&
+    state.lastEventAt != null &&
+    now - state.lastEventAt > stallMs;
 
   return (
     <div
@@ -36,17 +49,27 @@ export function JobStepList({ state, onCancel, className = "" }: JobStepListProp
       {state.status === "pending" && <p>排队中…</p>}
 
       {state.status === "running" && (
-        <div className="space-y-1.5">
+        <div className={`space-y-1.5 ${stalled ? "text-regen" : ""}`}>
           <div className="flex items-center justify-between gap-3">
             <p className="flex min-w-0 items-center gap-2">
-              <span aria-hidden className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-review" />
-              <span className="truncate">{state.step ?? "执行中"}</span>
+              <span
+                aria-hidden
+                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                  stalled ? "bg-regen" : "nc-pulse bg-accent"
+                }`}
+              />
+              <span className="truncate">{state.step ?? (stalled ? "仍在生成" : "执行中")}</span>
             </p>
             <span className="shrink-0 tabular-nums">
               {hasRatio && `${state.stepIndex}/${state.stepTotal} · `}
               {formatElapsed(state.elapsedMs)}
             </span>
           </div>
+          {stalled && (
+            <p className="text-caption text-regen">
+              已 {formatElapsed(now - state.lastEventAt!)} 没有新事件，可能仍在生成长内容
+            </p>
+          )}
           {percent != null && (
             <div
               className="h-1 overflow-hidden rounded-full bg-border"
@@ -56,17 +79,29 @@ export function JobStepList({ state, onCancel, className = "" }: JobStepListProp
               aria-valuemax={100}
               aria-label="任务进度"
             >
-              <div className="h-full rounded-full bg-review" style={{ width: `${percent}%` }} />
+              <div className={`h-full rounded-full ${stalled ? "bg-regen" : "bg-accent"}`} style={{ width: `${percent}%` }} />
             </div>
           )}
           {onCancel && (
             <button
               type="button"
               onClick={onCancel}
-              className="min-h-6 rounded px-2 text-review underline decoration-dotted underline-offset-2 hover:bg-review/10"
+              className="min-h-6 rounded px-2 text-accent underline decoration-dotted underline-offset-2 hover:bg-accent/10"
             >
               取消任务
             </button>
+          )}
+          {state.logs.length > 0 && (
+            <details className="text-caption text-text-subtle">
+              <summary className="cursor-pointer select-none">执行日志（{state.logs.length}）</summary>
+              <ul className="mt-1 max-h-32 space-y-0.5 overflow-y-auto rounded bg-surface-1 p-2">
+                {state.logs.map((line, i) => (
+                  <li key={i} className="truncate font-mono text-[10px] leading-4">
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            </details>
           )}
         </div>
       )}

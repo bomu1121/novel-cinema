@@ -4,7 +4,8 @@
  * 规则必须可被机器检查，否则等于没有。非零退出 = 有违规。
  *
  * 覆盖：硬编码十六进制色 / 任意值动效时长 / 旧主按钮与错误横幅残留 /
- *       本地枚举重复定义 / loading 文案三元。
+ *       本地枚举重复定义 / loading 文案三元 /
+ *       裸 Tailwind 调色板类 / 任意值 off-grid 间距 / Tailwind 默认无限动画。
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -47,6 +48,21 @@ const RULES = [
     name: "loading 文案三元",
     re: /\?\s*"[^"]*…"/,
     hint: "loading 时保留固定文案 + <Button loading>，禁止「…中」文案",
+  },
+  {
+    name: "裸 Tailwind 调色板类",
+    re: /(?:text|bg|border|ring|hover:text|hover:bg|hover:border|file:text|file:bg)-(?:zinc|gray|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate)-\d+|(?:text|bg|border|ring|hover:text|hover:bg|hover:border|file:text|file:bg)-(?:white|black)\b/,
+    hint: "改用 @theme 令牌（text-text/text-text-muted/text-text-subtle/surface/border/accent 等）",
+  },
+  {
+    name: "任意值间距 off-grid",
+    re: /(?:p|m|px|py|pt|pr|pb|pl|mx|my|mt|mr|mb|ml|gap)-\[\d+px\]/,
+    hint: "间距必须落在 4px 网格上（docs/07 V2），禁止 13px/7px 这类魔法值",
+  },
+  {
+    name: "Tailwind 默认无限动画",
+    re: /animate-(?:spin|pulse|bounce)\b/,
+    hint: "改用 nc-spin/nc-pulse（令牌时长，docs/07 V5），禁止绕过 --dur-* 的默认动画",
   },
 ];
 

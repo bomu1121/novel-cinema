@@ -16,7 +16,7 @@ export const SectionCard = forwardRef<HTMLDivElement, SectionCardProps>(function
   return (
     <section
       ref={ref}
-      className={`rounded-xl border border-border bg-surface shadow-card ${className}`}
+      className={`rounded-lg border border-border bg-surface ${className}`}
       {...rest}
     >
       {(title || actions) && (

@@ -8,6 +8,8 @@ import { test, expect } from "@playwright/test";
 
 test.describe("visual regression（fixture-book）", () => {
   const ROUTES: Array<{ name: string; path: string; settleMs?: number }> = [
+    { name: "ui", path: "/ui" },
+    { name: "book", path: "/books/fixture-book" },
     { name: "bible", path: "/books/fixture-book/bible" },
     { name: "script", path: "/books/fixture-book/script" },
     { name: "assets", path: "/books/fixture-book/assets" },

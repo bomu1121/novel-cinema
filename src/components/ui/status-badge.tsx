@@ -91,7 +91,7 @@ export function StatusPill({
         className={`inline-flex items-center rounded-full border border-border bg-surface-2 px-2 py-0.5 text-xs font-medium text-text-muted ${className}`}
       >
         {job === "running" && (
-          <span aria-hidden className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
+          <span aria-hidden className="mr-1 inline-block h-1.5 w-1.5 nc-pulse rounded-full bg-current" />
         )}
         {JOB_PHASE_LABEL[job]}
       </span>

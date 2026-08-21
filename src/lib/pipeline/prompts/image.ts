@@ -42,7 +42,7 @@ export function buildCharacterRefPrompt(ctx: ImagePromptContext): string {
     `character design sheet of ${ctx.character?.name ?? "the character"}`,
     bio.appearance ?? "",
     bio.outfit ?? "",
-    "neutral expression, standing, full body, front view, plain background, clean lines",
+    "neutral expression, standing, full body, front view, plain solid color background, clean lines, isolated character",
   ]
     .filter(Boolean)
     .join(", ");

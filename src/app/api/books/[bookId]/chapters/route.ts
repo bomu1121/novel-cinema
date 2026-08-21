@@ -1,6 +1,25 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/db";
 
+interface SourceChapterRow {
+  id: string;
+  idx: number;
+  title: string | null;
+  char_count: number;
+  status: string;
+  parse_meta?: Record<string, unknown> | null;
+}
+
+/** source_chapters 表不存 kind，从 idx / parse_meta 推导，兼容旧数据和 seed 数据。 */
+function deriveChapterKind(row: SourceChapterRow): string {
+  if (row.idx === 0) return "front";
+  const meta = row.parse_meta ?? {};
+  if (meta.splitBy === "fallback_5000") return "segment";
+  const unit = meta.unit;
+  if (unit === "卷" || unit === "部" || unit === "集") return "part";
+  return "chapter";
+}
+
 export async function GET(
   _request: Request,
   ctx: RouteContext<"/api/books/[bookId]/chapters">,
@@ -17,7 +36,7 @@ export async function GET(
           .single(),
         supabase
           .from("source_chapters")
-          .select("id, idx, kind, title, char_count, status, parse_meta")
+          .select("id, idx, title, char_count, status, parse_meta")
           .eq("book_id", bookId)
           .order("idx", { ascending: true }),
       ]);
@@ -27,7 +46,13 @@ export async function GET(
     }
     if (chaptersError) throw chaptersError;
 
-    return NextResponse.json({ book, chapters: chapters ?? [] });
+    const rows = (chapters ?? []) as SourceChapterRow[];
+    const normalized = rows.map((ch) => ({
+      ...ch,
+      kind: deriveChapterKind(ch),
+    }));
+
+    return NextResponse.json({ book, chapters: normalized });
   } catch (err) {
     const message = (err as { message?: string })?.message ?? (err instanceof Error ? err.message : String(err));
     return NextResponse.json({ error: message }, { status: 500 });

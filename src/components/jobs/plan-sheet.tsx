@@ -55,8 +55,8 @@ export function PlanSheet({ bookId, node, onExecute, onCancel, busy, className =
   const overwriteTotal = e?.overwrites.reduce((s, o) => s + o.count, 0) ?? 0;
 
   return (
-    <div className={`rounded-xl border border-review/40 bg-review/10 p-4 text-xs ${className}`}>
-      <p className="font-semibold text-review">确认执行「{NODE_LABEL[node]}」？</p>
+    <div className={`rounded-xl border border-accent/40 bg-accent/10 p-4 text-xs ${className}`}>
+      <p className="font-semibold text-accent">确认执行「{NODE_LABEL[node]}」？</p>
 
       {e && (
         <dl className="mt-2 space-y-1 text-text-muted">
@@ -70,7 +70,7 @@ export function PlanSheet({ bookId, node, onExecute, onCancel, busy, className =
               {overwriteTotal > 0
                 ? e.overwrites.map((o) => `${o.table} ${o.count} 行`).join("、")
                 : "不覆盖现有数据"}
-              {e.staged && <span className="ml-1 text-review">（先审阅后应用）</span>}
+              {e.staged && <span className="ml-1 text-accent">（先审阅后应用）</span>}
             </dd>
           </div>
           <div className="flex gap-2">

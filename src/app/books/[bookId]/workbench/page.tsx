@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useToast } from "@/components/toast";
@@ -8,12 +7,19 @@ import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { StatusPill } from "@/components/ui/status-badge";
 import { ImpactPill } from "@/components/ui/impact-pill";
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionCard } from "@/components/ui/section-card";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { JobStepList } from "@/components/jobs/job-step-list";
 import { StagedReviewPanel } from "@/components/jobs/staged-review-panel";
 import { PlanSheet } from "@/components/jobs/plan-sheet";
 import { ReviewInbox } from "@/components/jobs/review-inbox";
 import { TimeMachine } from "@/components/jobs/time-machine";
 import { CommandPalette } from "@/components/jobs/command-palette";
+import { ShortcutHelp } from "@/components/ui/shortcut-help";
 import { CostMeter } from "@/components/cost-meter";
 import { useJob } from "@/lib/ui/use-job";
 import type { GraphNode } from "@/lib/pipeline/graph";
@@ -257,14 +263,12 @@ export default function WorkbenchPage() {
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 px-6 py-12">
-      <header>
-        <Link href={`/books/${bookId}`} className="text-sm text-zinc-500 hover:text-zinc-900">
-          ← 返回章节
-        </Link>
-        <h1 className="mt-1 text-2xl font-bold">
-          编排台 <span className="text-sm font-normal text-zinc-400">中间态可视化 + 高级 JSON + 节点重跑</span>
-        </h1>
-      </header>
+      <PageHeader
+        title="编排台"
+        meta="中间态可视化 + 高级 JSON + 节点重跑"
+        backHref={`/books/${bookId}`}
+        backLabel="← 返回章节"
+      />
 
       <ErrorBanner message={error} onDismiss={() => setError(null)} />
 
@@ -273,10 +277,17 @@ export default function WorkbenchPage() {
       <TimeMachine bookId={bookId} />
 
       <CommandPalette open={paletteOpen} items={paletteItems} onClose={() => setPaletteOpen(false)} />
+      <ShortcutHelp
+        items={[
+          { keys: "⌘K", label: "打开命令面板" },
+          { keys: "Enter", label: "执行当前节点重跑" },
+          { keys: "Esc", label: "关闭弹层" },
+          { keys: "?", label: "打开/关闭快捷键帮助" },
+        ]}
+      />
 
       {/* 重跑按钮 */}
-      <section className="rounded-xl border border-zinc-200 p-4">
-        <h2 className="mb-2 font-semibold">节点重跑（确认后覆盖该节点及下游）</h2>
+      <SectionCard title="节点重跑（确认后覆盖该节点及下游）">
         <div className="flex flex-wrap gap-2">
           {(
             [
@@ -340,7 +351,7 @@ export default function WorkbenchPage() {
             />
           )}
 
-        <p className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-zinc-500">
+        <p className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-text-muted">
           章节 {data?.chapters?.length ?? 0} · 人物 {data?.characters?.length ?? 0} · beats{" "}
           {data?.beats?.length ?? 0} · 镜头 {data?.shots?.length ?? 0} · 图层 {data?.layers?.length ?? 0} · 资产{" "}
           {data?.assets?.length ?? 0}
@@ -352,38 +363,38 @@ export default function WorkbenchPage() {
             )}
           </span>
         </p>
-      </section>
+      </SectionCard>
 
       {/* 人物与配音 */}
       <section className="space-y-3">
         <h2 className="font-semibold">人物 / 配音表</h2>
         {data?.characters?.map((c) => (
-          <div key={c.id} className="rounded-xl border border-zinc-200 p-4 text-sm">
+          <Card key={c.id} className="text-sm">
             <div className="flex flex-wrap items-end gap-2">
               <label className="flex-1 text-xs">
                 名字
-                <input
+                <Input
                   value={String(cur(`characters:${c.id}`, c, "canonical_name") ?? "")}
                   onChange={(e) => edit(`characters:${c.id}`, "canonical_name", e.target.value)}
-                  className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5"
+                  className="mt-1"
                 />
               </label>
               <label className="flex-1 text-xs">
                 别名（逗号分隔）
-                <input
+                <Input
                   value={Array.isArray(cur(`characters:${c.id}`, c, "aliases")) ? (cur(`characters:${c.id}`, c, "aliases") as string[]).join(",") : (c.aliases ?? []).join(",")}
                   onChange={(e) =>
                     edit(`characters:${c.id}`, "aliases", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))
                   }
-                  className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5"
+                  className="mt-1"
                 />
               </label>
               <label className="flex-1 text-xs">
                 声线
-                <select
+                <Select
                   value={String(cur(`characters:${c.id}`, c, "voice_profile_id") ?? "")}
                   onChange={(e) => edit(`characters:${c.id}`, "voice_profile_id", e.target.value || null)}
-                  className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5"
+                  className="mt-1"
                 >
                   <option value="">（未绑定）</option>
                   {(data?.voiceProfiles ?? []).map((v) => (
@@ -391,42 +402,42 @@ export default function WorkbenchPage() {
                       {v.name} · {v.provider_voice_id}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="flex-1 text-xs">
                 描述
-                <input
+                <Input
                   value={String(cur(`characters:${c.id}`, c, "description") ?? "")}
                   onChange={(e) => edit(`characters:${c.id}`, "description", e.target.value)}
-                  className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5"
+                  className="mt-1"
                 />
               </label>
               <button
                 onClick={() => save("characters", c.id, c)}
                 disabled={busy !== null}
-                className="rounded border border-zinc-300 px-3 py-1.5 text-xs hover:border-zinc-900 disabled:opacity-50"
+                className="rounded border border-border-strong px-3 py-1.5 text-xs hover:border-text disabled:opacity-50"
               >
                 保存
               </button>
             </div>
             <JsonDetails table="characters" id={c.id} row={c} onSave={saveJson} />
-          </div>
+          </Card>
         ))}
 
         {data?.voiceProfiles?.map((v) => (
-          <div key={v.id} className="rounded-lg border border-zinc-200 p-3 text-xs">
+          <Card key={v.id} className="text-xs">
             <div className="flex flex-wrap items-end gap-2">
               <span className="font-medium">{v.name}（{v.role}）</span>
-              <input
+              <Input
                 value={String(cur(`voice_profiles:${v.id}`, v, "provider_voice_id") ?? "")}
                 onChange={(e) => edit(`voice_profiles:${v.id}`, "provider_voice_id", e.target.value)}
-                className="w-72 rounded border border-zinc-300 px-2 py-1"
+                className="max-w-72"
                 placeholder="火山音色 ID"
               />
               <button onClick={() => save("voice_profiles", v.id, v)} className="rounded border px-2 py-1">保存</button>
             </div>
-            <p className="mt-1 text-zinc-500">提示：改声线后，配音页“重录”才会用新声线。</p>
-          </div>
+            <p className="mt-1 text-text-muted">提示：改声线后，配音页“重录”才会用新声线。</p>
+          </Card>
         ))}
       </section>
 
@@ -434,50 +445,50 @@ export default function WorkbenchPage() {
       <section className="space-y-3">
         <h2 className="font-semibold">说话人（beat → 谁来说）</h2>
         {data?.beats?.map((b) => (
-          <div key={b.id} className="rounded-lg border border-zinc-200 p-3 text-xs">
+          <Card key={b.id} className="text-xs">
             <div className="flex flex-wrap items-start gap-2">
               <span className="mt-2 w-8">#{b.idx}</span>
-              <select
+              <Select
                 value={String(cur(`beats:${b.id}`, b, "character_id") ?? "")}
                 onChange={(e) => edit(`beats:${b.id}`, "character_id", e.target.value || null)}
-                className="rounded border border-zinc-300 px-2 py-1.5"
+                className="max-w-40"
               >
                 <option value="">旁白</option>
                 {(data?.characters ?? []).map((c) => (
                   <option key={c.id} value={c.id}>{c.canonical_name}</option>
                 ))}
-              </select>
-              <select
+              </Select>
+              <Select
                 value={String(cur(`beats:${b.id}`, b, "speaker_type") ?? "narrator")}
                 onChange={(e) => edit(`beats:${b.id}`, "speaker_type", e.target.value)}
-                className="rounded border border-zinc-300 px-2 py-1.5"
+                className="max-w-32"
               >
                 <option value="narrator">旁白</option>
                 <option value="character">角色</option>
                 <option value="onscreen_text">屏幕文字</option>
                 <option value="none">无</option>
-              </select>
-              <select
+              </Select>
+              <Select
                 value={String(cur(`beats:${b.id}`, b, "emotion") ?? "neutral")}
                 onChange={(e) => edit(`beats:${b.id}`, "emotion", e.target.value)}
-                className="rounded border border-zinc-300 px-2 py-1.5"
+                className="max-w-36"
               >
                 {EMOTIONS.map((e) => (
                   <option key={e} value={e}>{e}</option>
                 ))}
-              </select>
-              <textarea
+              </Select>
+              <Textarea
                 value={String(cur(`beats:${b.id}`, b, "text") ?? "")}
                 onChange={(e) => edit(`beats:${b.id}`, "text", e.target.value)}
                 rows={2}
-                className="min-w-64 flex-1 rounded border border-zinc-300 px-2 py-1.5"
+                className="min-w-64 flex-1"
               />
               <button onClick={() => save("beats", b.id, b)} className="rounded border px-2 py-1.5">保存</button>
             </div>
-            <p className="mt-1 text-zinc-500">
+            <p className="mt-1 text-text-muted">
               画面：{b.visual_note} · {b.estimated_duration_sec}s · 出处 {b.source_span?.start_char}–{b.source_span?.end_char}
             </p>
-          </div>
+          </Card>
         ))}
       </section>
 
@@ -487,35 +498,35 @@ export default function WorkbenchPage() {
         {data?.shots?.map((shot) => {
           const shotLayers = (data?.layers ?? []).filter((l) => l.shot_id === shot.id);
           return (
-            <div key={shot.id} className="rounded-xl border border-zinc-200 p-4 text-xs">
+            <Card key={shot.id} className="text-xs">
               <div className="flex flex-wrap items-end gap-2">
                 <span className="font-medium">beat#{shot.beat_id?.slice(0, 4)} · shot{shot.idx}</span>
-                <select
+                <Select
                   value={String(cur(`shots:${shot.id}`, shot, "camera") ?? "static")}
                   onChange={(e) => edit(`shots:${shot.id}`, "camera", e.target.value)}
-                  className="rounded border border-zinc-300 px-2 py-1.5"
+                  className="max-w-40"
                 >
                   {CAMERAS.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <select
+                </Select>
+                <Select
                   value={String(cur(`shots:${shot.id}`, shot, "transition_in") ?? "cut")}
                   onChange={(e) => edit(`shots:${shot.id}`, "transition_in", e.target.value)}
-                  className="rounded border border-zinc-300 px-2 py-1.5"
+                  className="max-w-40"
                 >
                   {TRANSITIONS.map((t) => <option key={t} value={t}>进:{t}</option>)}
-                </select>
-                <select
+                </Select>
+                <Select
                   value={String(cur(`shots:${shot.id}`, shot, "transition_out") ?? "cut")}
                   onChange={(e) => edit(`shots:${shot.id}`, "transition_out", e.target.value)}
-                  className="rounded border border-zinc-300 px-2 py-1.5"
+                  className="max-w-40"
                 >
                   {TRANSITIONS.map((t) => <option key={t} value={t}>出:{t}</option>)}
-                </select>
-                <input
+                </Select>
+                <Input
                   type="number" step={0.5} min={0.5}
                   value={Number(cur(`shots:${shot.id}`, shot, "duration_sec") ?? 0)}
                   onChange={(e) => edit(`shots:${shot.id}`, "duration_sec", Number(e.target.value))}
-                  className="w-20 rounded border border-zinc-300 px-2 py-1.5"
+                  className="max-w-20"
                 />
                 <button onClick={() => save("shots", shot.id, shot)} className="rounded border px-2 py-1.5">保存镜头</button>
               </div>
@@ -525,49 +536,49 @@ export default function WorkbenchPage() {
                   (a) => (a.kind === "expression" || a.kind === "character_ref") && (layer.character_id ? a.character_id === layer.character_id : true),
                 );
                 return (
-                  <div key={layer.id} className="mt-2 rounded-lg bg-zinc-50 p-3">
+                  <div key={layer.id} className="mt-2 rounded-lg bg-surface-2 p-3">
                     <div className="flex flex-wrap items-end gap-2">
                       <span className="font-medium">{layer.kind}·layer{layer.idx}</span>
-                      <select
+                      <Select
                         value={String(cur(`shot_layers:${layer.id}`, layer, "character_id") ?? "")}
                         onChange={(e) => edit(`shot_layers:${layer.id}`, "character_id", e.target.value || null)}
-                        className="rounded border border-zinc-300 px-2 py-1.5"
+                        className="max-w-40"
                       >
                         <option value="">（无人物）</option>
                         {(data?.characters ?? []).map((c) => <option key={c.id} value={c.id}>{c.canonical_name}</option>)}
-                      </select>
-                      <select
+                      </Select>
+                      <Select
                         value={String(cur(`shot_layers:${layer.id}`, layer, "asset_id") ?? "")}
                         onChange={(e) => edit(`shot_layers:${layer.id}`, "asset_id", e.target.value || null)}
-                        className="max-w-64 rounded border border-zinc-300 px-2 py-1.5"
+                        className="max-w-64"
                       >
                         <option value="">（无图）</option>
                         {charAssets.map((a) => (
                           <option key={a.id} value={a.id}>{a.title ?? a.scene_key}</option>
                         ))}
-                      </select>
-                      <select
+                      </Select>
+                      <Select
                         value={String(cur(`shot_layers:${layer.id}`, layer, "enter_animation") ?? "none")}
                         onChange={(e) => edit(`shot_layers:${layer.id}`, "enter_animation", e.target.value)}
-                        className="rounded border border-zinc-300 px-2 py-1.5"
+                        className="max-w-36"
                       >
                         {ENTER_EXIT.map((x) => <option key={x} value={x}>入场:{x}</option>)}
-                      </select>
-                      <select
+                      </Select>
+                      <Select
                         value={String(cur(`shot_layers:${layer.id}`, layer, "exit_animation") ?? "none")}
                         onChange={(e) => edit(`shot_layers:${layer.id}`, "exit_animation", e.target.value)}
-                        className="rounded border border-zinc-300 px-2 py-1.5"
+                        className="max-w-36"
                       >
                         {ENTER_EXIT.map((x) => <option key={x} value={x}>退场:{x}</option>)}
-                      </select>
+                      </Select>
                       <button onClick={() => save("shot_layers", layer.id, layer)} className="rounded border px-2 py-1.5">保存图层</button>
                     </div>
                     <JsonDetails table="shot_layers" id={layer.id} row={layer} onSave={saveJson} />
                   </div>
                 );
               })}
-              {shotLayers.length === 0 && <p className="mt-1 text-zinc-400">无图层（纯背景/黑场）</p>}
-            </div>
+              {shotLayers.length === 0 && <p className="mt-1 text-text-subtle">无图层（纯背景/黑场）</p>}
+            </Card>
           );
         })}
       </section>
@@ -576,25 +587,25 @@ export default function WorkbenchPage() {
       <section className="space-y-3">
         <h2 className="font-semibold">风格圣经 / 线索</h2>
         {data?.styleBible && (
-          <div className="rounded-xl border border-zinc-200 p-4 text-xs">
+          <Card className="text-xs">
             <div className="flex gap-2">
-              <textarea
+              <Textarea
                 value={String(cur(`style_bibles:${data.styleBible.id}`, data.styleBible, "visual_style") ?? "")}
                 onChange={(e) => edit(`style_bibles:${data.styleBible.id}`, "visual_style", e.target.value)}
                 rows={2}
-                className="flex-1 rounded border border-zinc-300 px-2 py-1.5"
+                className="flex-1"
               />
               <button onClick={() => save("style_bibles", data.styleBible.id, data.styleBible)} className="rounded border px-3">保存</button>
             </div>
-            <p className="mt-1 text-zinc-500">narration_tone：{data.styleBible.narration_tone} · version {data.styleBible.version} · <StatusPill table="style_bibles" status={data.styleBible.status} /></p>
+            <p className="mt-1 text-text-muted">narration_tone：{data.styleBible.narration_tone} · version {data.styleBible.version} · <StatusPill table="style_bibles" status={data.styleBible.status} /></p>
             <JsonDetails table="style_bibles" id={data.styleBible.id} row={data.styleBible} onSave={saveJson} />
-          </div>
+          </Card>
         )}
         {data?.clues?.map((cl) => (
-          <div key={cl.id} className="rounded-lg border border-zinc-200 p-3 text-xs">
-            <p className="font-medium">{cl.name} <span className="text-zinc-400">{cl.clue_type}</span></p>
+          <Card key={cl.id} className="text-xs">
+            <p className="font-medium">{cl.name} <span className="text-text-subtle">{cl.clue_type}</span></p>
             <JsonDetails table="clues" id={cl.id} row={cl} onSave={saveJson} />
-          </div>
+          </Card>
         ))}
       </section>
 
@@ -602,16 +613,16 @@ export default function WorkbenchPage() {
       <section className="space-y-3">
         <h2 className="font-semibold">资产 prompt（改后需重跑对应 phase 生成新候选）</h2>
         {data?.assets?.map((a) => (
-          <div key={a.id} className="rounded-lg border border-zinc-200 p-3 text-xs">
+          <Card key={a.id} className="text-xs">
             <p className="font-medium">{a.kind} · {a.title ?? a.scene_key} · <StatusPill table="assets" status={a.status} /></p>
-            <textarea
+            <Textarea
               value={String(cur(`assets:${a.id}`, a, "prompt") ?? "")}
               onChange={(e) => edit(`assets:${a.id}`, "prompt", e.target.value)}
               rows={2}
-              className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5"
+              className="mt-1"
             />
             <button onClick={() => save("assets", a.id, a)} className="mt-1 rounded border px-2 py-1">保存 prompt</button>
-          </div>
+          </Card>
         ))}
       </section>
     </main>
@@ -632,12 +643,13 @@ function JsonDetails({
   const [text, setText] = useState(() => JSON.stringify(row, null, 2));
   return (
     <details className="mt-2">
-      <summary className="cursor-pointer text-zinc-400">高级 JSON 编辑</summary>
-      <textarea
+      <summary className="cursor-pointer text-text-subtle">高级 JSON 编辑</summary>
+      <Textarea
+        mono
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={Math.min(10, text.split("\n").length + 1)}
-        className="mt-2 w-full rounded border border-zinc-300 p-2 font-mono text-[11px]"
+        className="mt-2"
       />
       <button onClick={() => onSave(table, id, text)} className="mt-1 rounded border px-2 py-1">
         保存 JSON

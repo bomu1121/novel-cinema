@@ -1,20 +1,25 @@
 @import "tailwindcss";
 
 /*
- * novel-cinema 设计令牌（docs/06-ui-optimization-plan.md §5）
+ * novel-cinema 设计令牌（docs/06 §5 + docs/08 §3）
  * 颜色/间距/圆角/动效一律用令牌，禁止在组件里硬编码字面量。
- * 状态色三族语义见 docs/06 §5.3：审阅态 / 执行态 / 领域语义。
+ * 状态色三族语义见 docs/06 §5.3；样式基调与反 AI 味见 docs/08 §2.1。
  */
 :root {
-  /* —— 表面与文字 —— */
-  --surface: #ffffff;
-  --surface-2: #f7f7f8;
-  --surface-3: #eeeef1;
+  /* —— 表面与文字（浅色管理页） —— */
+  --surface-0: #fafafa;   /* 页面底 */
+  --surface-1: #ffffff;   /* 卡片/面板 */
+  --surface-2: #f4f4f5;   /* 内嵌区块/输入底 */
+  --surface-3: #e4e4e7;   /* 按压/分隔 */
   --edge: #e4e4e7;
   --edge-strong: #d4d4d8;
   --ink: #18181b;
-  --ink-muted: #71717a;
-  --ink-subtle: #a1a1aa;
+  --ink-muted: #5f5f66;
+  --ink-subtle: #6f6f76;
+
+  /* —— 反色表面（两种主题都保持深底/浅字，用于按钮反色、视频黑场、代码块） —— */
+  --surface-invert: #18181b;
+  --inverse: #ffffff;
 
   /* —— 审阅状态色（族 A，docs/06 §5.3） —— */
   --st-approved: #059669;
@@ -24,12 +29,27 @@
   --st-regen: #d97706;
   --st-rejected: #a1a1aa;
 
+  /* —— 交互强调色（docs/07 V1 + docs/08 §2.1）：胶片青，不用 AI 默认靛蓝 —— */
+  --accent: #0f766e;
+  --accent-hover: #115e59;
+  --accent-active: #134e4a;
+  --accent-soft: #f0fdfa;
+  --on-accent: #ffffff;
+
+  /* —— 领域标签色（docs/07 V9）：非状态、非交互的领域 chip，也必须走令牌 —— */
+  --clue: #d97706;
+  --spoiler: #dc2626;
+  --character: #2563eb;
+
   /* —— 动效时长（对齐 Material 3 三档：short 50-200 / medium 200-400 / long 400-700） —— */
   --dur-instant: 100ms;
   --dur-fast: 160ms;
   --dur-base: 240ms;
   --dur-slow: 320ms;
   --dur-stagger: 40ms;
+  /* 无限循环指示器（docs/07 V5）：功能型动画也要走令牌，不能绕开设计系统 */
+  --dur-spin: 1s;
+  --dur-pulse: 2s;
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-inout: cubic-bezier(0.4, 0, 0.2, 1);
 
@@ -37,14 +57,36 @@
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 4px 12px rgb(0 0 0 / 0.04);
-  --shadow-pop: 0 8px 32px rgb(0 0 0 / 0.12);
+  --radius-xl: 18px;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 1px 8px rgb(0 0 0 / 0.04);
+  --shadow-pop: 0 8px 32px rgb(0 0 0 / 0.12), 0 2px 8px rgb(0 0 0 / 0.08);
   --hit-min: 24px;
   --hit-comfortable: 36px;
 }
 
+/* 暗色画布（docs/08 §2.1 / §5.11）：只在 canvas 容器挂 data-theme="dark" */
+[data-theme="dark"] {
+  --surface-0: #0c0c0e;
+  --surface-1: #18181b;
+  --surface-2: #1f1f23;
+  --surface-3: #27272a;
+  --edge: #27272a;
+  --edge-strong: #3f3f46;
+  --ink: #f4f4f5;
+  --ink-muted: #a1a1aa;
+  --ink-subtle: #71717a;
+  --accent: #2dd4bf;
+  --accent-hover: #5eead4;
+  --accent-active: #14b8a6;
+  --accent-soft: rgba(45, 212, 191, 0.16);
+  --on-accent: #0c0c0e;
+  /* surface-invert / inverse 保持常量：深底黑场与浅字在暗色下不变 */
+}
+
 @theme inline {
-  --color-surface: var(--surface);
+  --color-surface-0: var(--surface-0);
+  --color-surface: var(--surface-1);
+  --color-surface-1: var(--surface-1);
   --color-surface-2: var(--surface-2);
   --color-surface-3: var(--surface-3);
   --color-border: var(--edge);
@@ -52,14 +94,37 @@
   --color-text: var(--ink);
   --color-text-muted: var(--ink-muted);
   --color-text-subtle: var(--ink-subtle);
+  --color-inverse: var(--inverse);
+  --color-surface-invert: var(--surface-invert);
   --color-approved: var(--st-approved);
   --color-review: var(--st-review);
   --color-draft: var(--st-draft);
   --color-stale: var(--st-stale);
   --color-regen: var(--st-regen);
   --color-rejected: var(--st-rejected);
-  --font-sans: var(--font-geist-sans), system-ui, "Microsoft YaHei", sans-serif;
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-active: var(--accent-active);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-clue: var(--clue);
+  --color-spoiler: var(--spoiler);
+  --color-character: var(--character);
+
+  /* 字体：正文无衬线 + 标题衬线（docs/08 §3.2 双字体） */
+  --font-sans: var(--font-geist-sans), "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, "Cascadia Code", monospace;
+  --font-display: "Noto Serif SC", "Songti SC", serif;
+
+  /* —— 字阶（docs/08 §3.2） —— */
+  --text-overline: 0.75rem;
+  --text-caption: 0.8125rem;
+  --text-body: 0.875rem;
+  --text-lead: 1rem;
+  --text-title: 1.25rem;
+  --text-page: 1.75rem;
+  --text-display: 2.25rem;
+
   --duration-instant: var(--dur-instant);
   --duration-fast: var(--dur-fast);
   --duration-base: var(--dur-base);
@@ -69,19 +134,20 @@
   --radius-sm: var(--radius-sm);
   --radius-md: var(--radius-md);
   --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
   --shadow-card: var(--shadow-card);
   --shadow-pop: var(--shadow-pop);
 }
 
 body {
-  background: var(--surface);
+  background: var(--surface-0);
   color: var(--ink);
   font-family: var(--font-sans);
 }
 
-/* 键盘可达性基线（docs/06 §5.5） */
+/* 键盘可达性基线（docs/06 §5.5）；焦点环用交互强调色而非状态色（docs/07 V1） */
 :focus-visible {
-  outline: 2px solid var(--st-review);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -127,9 +193,40 @@ body {
 .kb-pan { animation: kb-pan 4s ease-in-out infinite alternate; }
 .kb-breath { animation: breath 2.6s ease-in-out infinite alternate; }
 
+/* 功能型指示器（docs/07 V5）：spinner/脉冲走令牌时长，reduced-motion 由全局兜底停掉 */
+@keyframes nc-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes nc-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.nc-spin { animation: nc-spin var(--dur-spin) linear infinite; }
+.nc-pulse { animation: nc-pulse var(--dur-pulse) ease-in-out infinite; }
+
+/* 拖放落空抖动（docs/08 §7）：只表达“放错了”，不是装饰 */
+@keyframes nc-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+.nc-shake { animation: nc-shake var(--dur-fast) ease-out 2; }
+
 /* stale 状态一次性呼吸提示（1 次后静止，不无限循环） */
 @keyframes stale-flash {
   0%, 100% { box-shadow: 0 0 0 0 rgb(220 38 38 / 0); }
   50% { box-shadow: 0 0 0 3px rgb(220 38 38 / 0.35); }
 }
 .stale-flash { animation: stale-flash 1s ease-out 1; }
+
+/* 透明图预览棋盘格：用于角色设定图/表情变体，直观展示抠图后的 alpha */
+.bg-checker {
+  background-color: var(--surface-2);
+  background-image:
+    linear-gradient(45deg, var(--surface-3) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--surface-3) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--surface-3) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--surface-3) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}

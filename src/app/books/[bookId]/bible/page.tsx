@@ -1,11 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { StatusPill } from "@/components/ui/status-badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
 import { JobRunner } from "@/components/jobs/job-runner";
 
 interface StyleProposal {
@@ -107,33 +109,31 @@ export default function BiblePage() {
 
   return (
     <main className="mx-auto max-w-4xl space-y-8 px-6 py-12">
-      <header className="flex items-start justify-between">
-        <div>
-          <Link href={`/books/${bookId}`} className="text-sm text-zinc-500 hover:text-zinc-900">
-            ← 返回章节
-          </Link>
-          <h1 className="mt-1 text-2xl font-bold">
-            {data.book?.title ?? "全书档案"} <span className="text-sm font-normal text-zinc-400">签核点 A</span>
-          </h1>
-        </div>
-        <JobRunner
-          bookId={bookId}
-          node="analyze"
-          label="运行单章分析"
-          disabled={approving}
-          onRunningChange={(r) => setApproving(r)}
-          onDone={() => void load()}
-        />
-      </header>
+      <PageHeader
+        title={data.book?.title ?? "全书档案"}
+        meta="签核点 A"
+        backHref={`/books/${bookId}`}
+        backLabel="← 返回章节"
+        actions={
+          <JobRunner
+            bookId={bookId}
+            node="analyze"
+            label="运行单章分析"
+            disabled={approving}
+            onRunningChange={(r) => setApproving(r)}
+            onDone={() => void load()}
+          />
+        }
+      />
 
       <ErrorBanner message={error} />
 
       {summary && (
-        <section className="rounded-xl border border-zinc-200 p-5">
+        <Card>
           <h2 className="font-semibold">章节摘要</h2>
-          <p className="mt-2 text-sm leading-6 text-zinc-700">{summary.summary}</p>
-          {summary.tone && <p className="mt-2 text-xs text-zinc-500">基调：{summary.tone}</p>}
-        </section>
+          <p className="mt-2 text-sm leading-6 text-text">{summary.summary}</p>
+          {summary.tone && <p className="mt-2 text-xs text-text-muted">基调：{summary.tone}</p>}
+        </Card>
       )}
 
       {data.characters && data.characters.length > 0 && (
@@ -141,16 +141,16 @@ export default function BiblePage() {
           <h2 className="mb-3 font-semibold">人物</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             {data.characters.map((c) => (
-              <div key={c.id} className="rounded-lg border border-zinc-200 p-4 text-sm">
+              <Card key={c.id} className="text-sm">
                 <p className="font-medium">
                   {c.canonical_name}
                   {c.aliases.length > 0 && (
-                    <span className="ml-2 text-xs text-zinc-500">aka {c.aliases.join(" / ")}</span>
+                    <span className="ml-2 text-xs text-text-muted">aka {c.aliases.join(" / ")}</span>
                   )}
                 </p>
-                <p className="mt-1 text-xs text-zinc-400">{c.role}</p>
-                <p className="mt-2 text-zinc-600">{c.description}</p>
-              </div>
+                <p className="mt-1 text-xs text-text-subtle">{c.role}</p>
+                <p className="mt-2 text-text-muted">{c.description}</p>
+              </Card>
             ))}
           </div>
         </section>
@@ -159,17 +159,17 @@ export default function BiblePage() {
       {data.clues && data.clues.length > 0 && (
         <section>
           <h2 className="mb-3 font-semibold">线索</h2>
-          <ul className="space-y-2">
+          <div className="space-y-2">
             {data.clues.map((cl) => (
-              <li key={cl.id} className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
+              <Card key={cl.id} className="border-clue/40 bg-clue/10 px-4 py-3 text-sm">
                 <span className="font-medium">{cl.name}</span>
-                <span className="ml-2 text-xs text-amber-600">{cl.clue_type}</span>
-                {cl.is_red_herring && <span className="ml-2 text-xs text-red-500">红鲱鱼</span>}
-                {cl.is_spoiler && <span className="ml-2 text-xs text-red-500">剧透禁画</span>}
-                <p className="mt-1 text-zinc-600">{cl.description}</p>
-              </li>
+                <span className="ml-2 text-xs text-clue">{cl.clue_type}</span>
+                {cl.is_red_herring && <span className="ml-2 text-xs text-spoiler">红鲱鱼</span>}
+                {cl.is_spoiler && <span className="ml-2 text-xs text-spoiler">剧透禁画</span>}
+                <p className="mt-1 text-text-muted">{cl.description}</p>
+              </Card>
             ))}
-          </ul>
+          </div>
         </section>
       )}
 
@@ -187,16 +187,16 @@ export default function BiblePage() {
           )}
         </div>
         {!data.styleBible && (
-          <p className="text-sm text-zinc-400">还没有候选，点右上角“运行单章分析”生成。</p>
+          <EmptyState description="还没有候选，点右上角“运行单章分析”生成。" />
         )}
         <div className={compareMode ? "grid gap-4 lg:grid-cols-3" : "space-y-4"}>
           {data.styleBible?.proposal_json?.map((p, i) => (
-            <div
+            <Card
               key={i}
-              className={`rounded-xl border p-5 text-sm ${
+              className={`text-sm ${
                 data.styleBible?.approved_proposal_index === i
                   ? "border-approved/40 bg-approved/10"
-                  : "border-zinc-200"
+                  : ""
               }`}
             >
             <div className="flex items-center justify-between">
@@ -215,29 +215,29 @@ export default function BiblePage() {
                 </Button>
               )}
             </div>
-            <p className="mt-3 font-mono text-xs leading-5 text-zinc-700">{p.visual_style}</p>
-            <p className="mt-2 text-zinc-600">{p.art_direction}</p>
+            <p className="mt-3 font-mono text-xs leading-5 text-text">{p.visual_style}</p>
+            <p className="mt-2 text-text-muted">{p.art_direction}</p>
             {p.color_palette.length > 0 && (
               <p className="mt-2 flex items-center gap-2">
                 {p.color_palette.map((color) => (
                   <span
                     key={color}
-                    className="inline-block h-5 w-5 rounded border border-zinc-300"
+                    className="inline-block h-5 w-5 rounded border border-border-strong"
                     style={{ backgroundColor: color }}
                     title={color}
                   />
                 ))}
               </p>
             )}
-            <p className="mt-2 text-xs text-zinc-500">旁白基调：{p.narration_tone}</p>
+            <p className="mt-2 text-xs text-text-muted">旁白基调：{p.narration_tone}</p>
             {p.spoiler_rules.length > 0 && (
-              <ul className="mt-2 list-disc pl-5 text-xs text-amber-700">
+              <ul className="mt-2 list-disc pl-5 text-xs text-clue">
                 {p.spoiler_rules.map((rule, j) => (
                   <li key={j}>{rule}</li>
                 ))}
               </ul>
             )}
-          </div>
+          </Card>
         ))}
         </div>
       </section>

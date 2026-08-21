@@ -11,6 +11,7 @@
     "test:ui": "vitest run --config vitest.ui.config.mts",
     "test:e2e": "playwright test",
     "seed:fixture": "tsx scripts/seed-fixture.ts",
+    "seed:magyan": "tsx scripts/seed-fixture.ts",
     "lint:ui": "node .claude/skills/nc-ui-contract/scripts/lint-ui-contract.mjs",
     "render:local": "tsx scripts/render-local.ts",
     "pipeline:local": "tsx scripts/pipeline-local.ts",
@@ -24,6 +25,7 @@
     "next": "16.3.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "sharp": "^0.35.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {

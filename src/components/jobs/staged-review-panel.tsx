@@ -29,7 +29,7 @@ const OP_LABEL: Record<StagedEntry["op"], string> = {
 
 const OP_STYLE: Record<StagedEntry["op"], string> = {
   insert: "border-approved/40 bg-approved/10 text-approved",
-  update: "border-review/40 bg-review/10 text-review",
+  update: "border-accent/40 bg-accent/10 text-accent",
   delete: "border-stale/40 bg-stale/10 text-stale",
 };
 
@@ -222,11 +222,11 @@ export function StagedReviewPanel({
 
   return (
     <section
-      className={`rounded-xl border border-review/40 bg-surface p-4 ${className}`}
+      className={`rounded-xl border border-accent/40 bg-surface p-4 ${className}`}
       aria-label="变更审阅"
     >
       <header className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-review">
+        <h2 className="text-sm font-semibold text-accent">
           {nodeLabel ?? "AI 变更审阅"} · {entries.length} 处变更 · 已决策 {decided}（接受 {accepted} / 驳回 {rejected}）
         </h2>
         <span className="text-xs text-text-subtle">键位：j/k 移动 · a 接受 · r 驳回 · u 撤销 · Enter 应用</span>
@@ -251,7 +251,7 @@ export function StagedReviewPanel({
                   key={e.id}
                   data-entry-id={e.id}
                   className={`rounded-lg border px-3 py-2 text-xs transition-colors duration-fast ${
-                    selected ? "border-review/60 bg-review/5" : "border-border bg-surface-2"
+                    selected ? "border-accent/60 bg-accent/5" : "border-border bg-surface-2"
                   } ${decision === "accepted" ? "opacity-70" : ""}`}
                 >
                   <div className="flex items-center justify-between gap-3">

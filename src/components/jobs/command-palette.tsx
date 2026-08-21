@@ -50,7 +50,7 @@ export function CommandPalette({ open, items, onClose }: CommandPaletteProps) {
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-start justify-center bg-black/30 p-[15vh]"
+      className="fixed inset-0 z-[200] flex items-start justify-center bg-surface-invert/30 p-[15vh]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -95,7 +95,7 @@ export function CommandPalette({ open, items, onClose }: CommandPaletteProps) {
                 onClick={() => run(item)}
                 onMouseEnter={() => setCursor(i)}
                 className={`flex w-full items-center justify-between px-4 py-2 text-left text-sm ${
-                  i === cursor ? "bg-review/10 text-review" : "text-text"
+                  i === cursor ? "bg-accent/10 text-accent" : "text-text"
                 }`}
               >
                 <span>{item.label}</span>

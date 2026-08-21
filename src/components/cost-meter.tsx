@@ -44,7 +44,7 @@ export function CostMeter({ bookId, className = "" }: CostMeterProps) {
       aria-label="成本概览"
     >
       <span className="inline-flex items-center gap-1">
-        <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-review" />
+        <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-accent" />
         {row("今日", today)}
       </span>
       <span className="inline-flex items-center gap-1">

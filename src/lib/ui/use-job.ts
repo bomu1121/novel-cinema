@@ -18,6 +18,8 @@ export interface UseJobState {
   logs: string[];
   error: string | null;
   elapsedMs: number;
+  /** 最近一次收到服务端事件的时间戳（用于停滞检测） */
+  lastEventAt: number | null;
 }
 
 interface PolledJob {
@@ -42,27 +44,29 @@ const IDLE: UseJobState = {
   logs: [],
   error: null,
   elapsedMs: 0,
+  lastEventAt: null,
 };
 
 function applyEvent(state: UseJobState, e: JobEvent): UseJobState {
+  const next = { ...state, lastEventAt: Date.now() };
   const p = e.payload as { label?: string; index?: number; total?: number; value?: number; line?: string; message?: string; cancelled?: boolean };
   switch (e.kind) {
     case "step":
-      return { ...state, step: p.label ?? state.step, stepIndex: p.index ?? state.stepIndex, stepTotal: p.total ?? state.stepTotal };
+      return { ...next, step: p.label ?? state.step, stepIndex: p.index ?? state.stepIndex, stepTotal: p.total ?? state.stepTotal };
     case "progress":
-      return { ...state, progress: typeof p.value === "number" ? p.value : state.progress };
+      return { ...next, progress: typeof p.value === "number" ? p.value : state.progress };
     case "log":
-      return { ...state, logs: [...state.logs.slice(-49), p.line ?? ""] };
+      return { ...next, logs: [...state.logs.slice(-49), p.line ?? ""] };
     case "error":
       return {
-        ...state,
+        ...next,
         status: p.cancelled ? "cancelled" : "failed",
         error: p.message ?? state.error,
       };
     case "done":
-      return { ...state, status: "succeeded", progress: 1 };
+      return { ...next, status: "succeeded", progress: 1 };
     default:
-      return state;
+      return next;
   }
 }
 

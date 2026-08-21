@@ -13,6 +13,8 @@
 - [docs/04-interaction-redesign.md](docs/04-interaction-redesign.md) — 交互重设计方案 v1（画布 + 检查器 + 命令面板）
 - [docs/05-overlap-transitions.md](docs/05-overlap-transitions.md) — 转场与叠化
 - [docs/06-ui-optimization-plan.md](docs/06-ui-optimization-plan.md) — **UI 优化方案 v2**（04 的超集：agentic 交互原语移植 + 组件规格 + Skill 清单 + 验证闭环）
+- [docs/07-ui-visual-interaction-research.md](docs/07-ui-visual-interaction-research.md) — **UI 视觉与交互调研**（主流 AI coding 工具的视觉语言与交互规则 + 本项目差距与 P4 建议）
+- [docs/08-ui-visual-interaction-refactor.md](docs/08-ui-visual-interaction-refactor.md) — **UI 视觉与交互重构方案**（元素级 + 整体体验：页面骨架、组件规格、画布/编排台、里程碑）
 
 ## 技术栈（本地单机版）
 
@@ -42,6 +44,9 @@ npm run lint
 npm test               # 29 个单测
 npm run build
 
+# 一键载入《魔眼之匣》测试章（固定 bookId=fixture-book，幂等重建）
+npm run seed:magyan
+
 # 一键流水线（单章）
 npm run pipeline:local -- --book <bookId> --approve-all
 
@@ -57,6 +62,8 @@ npm run cost:report -- --book <bookId>
 - [x] T0–T10 代码全部完成
 - [x] 数据库本地 SQLite + 本地媒体（Supabase 风格链式 API，上层零改动）
 - [x] **真实端到端出片**：《雨夜疑案》样章 → 分析/改编（DeepSeek）→ 图像（Seedream 5.0 Pro，3+6 张）→ 分镜（17 镜头）→ 配音（8 句）→ 渲染 53.6s mp4（1920×1080，烧字幕）
+- [x] **内置测试夹具已换为《魔眼之匣》测试章**：`npm run seed:magyan` 幂等重建固定 bookId=fixture-book，含 3796 字原文、15 beats、15 shots、占位媒体与完整下游数据；修复了旧 fixture 角色/资产插入顺序与媒体 404 问题。
+- [x] **角色图自动抠底（透明 PNG）**：生成的角色设定图/表情变体会自动移除背景并保存为透明 PNG；资产库用棋盘格预览，分镜/画布/渲染直接叠加在背景层上。
 - [x] **编排台** `/books/[bookId]/workbench`：中间态可视化编辑（人物/说话人/图层人物图/入场退场/机位/声线/JSON）+ stale 传播 + 单节点重跑
 - [x] **分镜画布** `/books/[bookId]/canvas`：React Flow 时间轴画布——资产池拖图换人物、镜头/图层检查器、入场退场动画、分镜/配音重跑
 - [x] 画布迭代②：beat 卡片直接换说话人/台词/情绪，配音状态与 ASR 标记上卡；渲染器支持 slide 入场/退场位移动画（改的画布字段真的会渲染）

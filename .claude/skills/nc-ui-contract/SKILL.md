@@ -11,14 +11,16 @@ allowed-tools: [Read, Grep, Edit, Write, Bash]
 
 # novel-cinema UI 契约
 
-写任何 UI 前先读 `references/tokens.md` 与 `references/status-map.md`。
+写任何 UI 前先读 `references/tokens.md`、`references/status-map.md` 与 `references/anti-slop.md`。
 
 ## 硬性规则（违反即返工）
 
 1. **禁止硬编码颜色**。只用 `--color-*` 令牌（`bg-surface` / `text-text-muted` /
    `border-approved` 等）；新增颜色必须先加令牌（`src/app/globals.css` 的 `@theme`）。
+   交互强调（焦点/进度/激活/链接）用 `--accent`，**不借用 `--st-review`**（docs/07 V1）。
 2. **禁止硬编码动效时长**。只用 `--dur-instant|fast|base|slow`（对应 `duration-instant|fast|base|slow`），
    对齐 Material 3 三档（short 50-200 / medium 200-400 / long 400-700ms）。
+   无限指示器用 `nc-spin` / `nc-pulse`（令牌时长），禁止 `animate-spin/pulse/bounce`（docs/07 V5）。
 3. **状态分三族**（`docs/06` §5.3）：
    - 审阅态 → `toReviewStatus(table, s)` + `<StatusPill>`（返回 null 就别画徽章）；
    - 执行态（pending/running/succeeded/failed/cancelled）→ `<StatusPill>` 自动渲染进度 chip；
@@ -39,8 +41,10 @@ allowed-tools: [Read, Grep, Edit, Write, Bash]
 ## 复核清单（提交前自查）
 
 - [ ] 无 `bg-[#`、无 `duration-[`、无 `#hex` 颜色字面量
+- [ ] 无裸 Tailwind 调色板类（`text-zinc-*` / `bg-white` 等）、无 off-grid 任意间距、无 `animate-spin/pulse/bounce`
 - [ ] 无「…中」loading 文案三元
 - [ ] 无裸 `status` 文本渲染、无本地枚举重复定义
+- [ ] 交互强调用 `accent` 而非 `st-review`
 - [ ] 新交互可纯键盘完成
 - [ ] 破坏性操作有 checkpoint，且 `reversible` 是真实值
 
@@ -50,4 +54,4 @@ allowed-tools: [Read, Grep, Edit, Write, Bash]
 npm run lint:ui
 ```
 
-参考：`references/tokens.md`、`references/status-map.md`、`references/copy.md`
+参考：`references/tokens.md`、`references/status-map.md`、`references/copy.md`、`references/anti-slop.md`

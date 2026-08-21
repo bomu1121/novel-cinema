@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import sharp from "sharp";
 import { getSupabaseAdmin } from "@/lib/db";
 import { JobCancelledError, NOOP_REPORTER, type ProgressReporter } from "@/lib/jobs/types";
 import { r2Put, r2PublicUrl, r2SignedUrl } from "@/lib/r2";
@@ -64,8 +65,9 @@ export async function resolveAssetUrl(asset: {
   file_key?: string | null;
   params?: unknown;
 }): Promise<string | null> {
-  const params = asset.params as { url?: string; dataBase64?: string } | null;
+  const params = asset.params as { url?: string; dataBase64?: string; imageDataBase64?: string } | null;
   if (params?.url) return params.url;
+  if (params?.imageDataBase64) return `data:image/png;base64,${params.imageDataBase64}`;
   if (params?.dataBase64) return `data:audio/mpeg;base64,${params.dataBase64}`;
   if (!asset.file_key) return null;
   if (process.env.R2_PUBLIC_URL) return r2PublicUrl(asset.file_key);
@@ -290,6 +292,103 @@ async function fetchImageBytes(url: string): Promise<Uint8Array> {
   return new Uint8Array(await res.arrayBuffer());
 }
 
+/**
+ * 角色图自动抠底：从图片四边做 flood fill，把与边缘主色相近的连续背景设为透明。
+ * 生成模型通常返回不透明 JPG/PNG，而项目底层逻辑是角色层叠在背景层之上，
+ * 所以角色设定图/表情变体必须是无背景的透明 PNG。
+ */
+async function removeBackground(bytes: Uint8Array): Promise<Buffer> {
+  const { data, info } = await sharp(Buffer.from(bytes), { failOn: "none" })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const { width, height, channels } = info;
+  if (channels < 4) {
+    throw new Error("sharp ensureAlpha 后通道数仍不足 4");
+  }
+
+  const src = data;
+  const out = Buffer.from(src);
+  const tolerance = Number(process.env.CHARACTER_BG_REMOVE_TOLERANCE ?? 40);
+
+  // 计算四边平均色作为背景参考色（忽略已有透明像素，兼容输入本身带 alpha 的情况）
+  let rSum = 0;
+  let gSum = 0;
+  let bSum = 0;
+  let borderCount = 0;
+  const at = (x: number, y: number) => (y * width + x) * 4;
+  for (let x = 0; x < width; x++) {
+    for (const y of [0, height - 1]) {
+      const i = at(x, y);
+      if (src[i + 3] >= 128) {
+        rSum += src[i];
+        gSum += src[i + 1];
+        bSum += src[i + 2];
+        borderCount++;
+      }
+    }
+  }
+  for (let y = 1; y < height - 1; y++) {
+    for (const x of [0, width - 1]) {
+      const i = at(x, y);
+      if (src[i + 3] >= 128) {
+        rSum += src[i];
+        gSum += src[i + 1];
+        bSum += src[i + 2];
+        borderCount++;
+      }
+    }
+  }
+  const bgR = borderCount > 0 ? rSum / borderCount : 0;
+  const bgG = borderCount > 0 ? gSum / borderCount : 0;
+  const bgB = borderCount > 0 ? bSum / borderCount : 0;
+
+  const maxDist = tolerance * tolerance * 3;
+  const dist2 = (r: number, g: number, b: number) => {
+    const dr = r - bgR;
+    const dg = g - bgG;
+    const db = b - bgB;
+    return dr * dr + dg * dg + db * db;
+  };
+
+  const visited = new Uint8Array(width * height);
+  const queue: number[] = [];
+  const tryPush = (x: number, y: number) => {
+    const p = y * width + x;
+    if (visited[p]) return;
+    const i = p * 4;
+    // 已经是透明的像素视为背景，继续向邻域扩散
+    if (src[i + 3] < 128 || dist2(src[i], src[i + 1], src[i + 2]) <= maxDist) {
+      visited[p] = 1;
+      out[i + 3] = 0;
+      queue.push(p);
+    }
+  };
+
+  for (let x = 0; x < width; x++) {
+    tryPush(x, 0);
+    tryPush(x, height - 1);
+  }
+  for (let y = 1; y < height - 1; y++) {
+    tryPush(0, y);
+    tryPush(width - 1, y);
+  }
+
+  let head = 0;
+  while (head < queue.length) {
+    const p = queue[head++];
+    const x = p % width;
+    const y = Math.floor(p / width);
+    if (x > 0) tryPush(x - 1, y);
+    if (x < width - 1) tryPush(x + 1, y);
+    if (y > 0) tryPush(x, y - 1);
+    if (y < height - 1) tryPush(x, y + 1);
+  }
+
+  return sharp(out, { raw: { width, height, channels: 4 } }).png().toBuffer();
+}
+
 /** A20/A30：执行某个 phase 的资产生成，候选全部落 assets（candidate 状态） */export async function generateAssetPhase(
   bookId: string,
   phase: "phase1" | "phase2",
@@ -365,14 +464,25 @@ async function fetchImageBytes(url: string): Promise<Uint8Array> {
         let fileKey: string | null = null;
         let params: Record<string, unknown> = {};
         if (image.url) {
-          params = { url: image.url };
+          const isCharacter = spec.kind === "character_ref" || spec.kind === "expression";
           try {
             const bytes = await fetchImageBytes(image.url);
-            fileKey = `book/${bookId}/assets/${randomUUID()}.png`;
-            await r2Put(fileKey, bytes, "image/png");
-          } catch (r2Err) {
-            // R2 未配置时保留 provider 直链，后续可重导
-            console.warn("[assets] R2 上传失败，保留直链:", r2Err);
+            const processed = isCharacter ? await removeBackground(bytes) : bytes;
+            try {
+              fileKey = `book/${bookId}/assets/${randomUUID()}.png`;
+              await r2Put(fileKey, processed, "image/png");
+              params = { transparent: isCharacter };
+            } catch (r2Err) {
+              // R2 未配置：角色图用 dataURL 保留透明 PNG；背景图保留 provider 直链
+              console.warn("[assets] R2 上传失败，保留 dataURL/直链:", r2Err);
+              params = isCharacter
+                ? { imageDataBase64: processed.toString("base64"), transparent: true }
+                : { url: image.url };
+            }
+          } catch (err) {
+            // 下载/抠图失败：退化为 provider 直链，后续可重导
+            console.warn("[assets] 下载/抠图失败，保留直链:", err);
+            params = { url: image.url };
           }
         }
 

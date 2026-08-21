@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { StatusPill } from "@/components/ui/status-badge";
 import { JobStepList } from "@/components/jobs/job-step-list";
+import { ShortcutHelp } from "@/components/ui/shortcut-help";
 import { useJob } from "@/lib/ui/use-job";
 import { CAMERAS, EMOTIONS, ENTER_EXIT, TRANSITIONS } from "@/lib/ui/enums";
 import {
@@ -459,11 +460,13 @@ function StoryboardCanvas() {
   }
 
   const [draggingAsset, setDraggingAsset] = useState(false);
+  const [draggingAssetId, setDraggingAssetId] = useState<string | null>(null);
   const [dropShake, setDropShake] = useState(false);
 
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
     setDraggingAsset(false);
+    setDraggingAssetId(null);
     const assetId = e.dataTransfer.getData("application/x-asset-id");
     if (!assetId) return;
     const asset = assetsById.get(assetId);
@@ -507,14 +510,32 @@ function StoryboardCanvas() {
 
   return (
     <div
-      className={`flex h-screen w-screen bg-zinc-100 ${draggingAsset ? "ring-2 ring-inset ring-review/60" : ""}`}
+      data-theme="dark"
+      className={`flex h-screen w-screen flex-col bg-surface-0 ${draggingAsset ? "ring-2 ring-inset ring-accent/60" : ""}`}
       onDrop={onDrop}
       onDragOver={(e) => e.preventDefault()}
     >
+      {/* 顶部工具栏（docs/08 §5.11） */}
+      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-surface-1 px-3">
+        <span className="font-display text-lead font-semibold text-text">分镜画布</span>
+        <span className="hidden text-caption text-text-muted sm:inline">
+          快捷键 B/S 选对象 · R 重跑 · 拖右缘调时长
+        </span>
+        <div className="ml-auto flex items-center gap-2">
+          <Button size="sm" variant="secondary" onClick={() => void undo()}>
+            撤销
+          </Button>
+          <Button size="sm" onClick={startFlowPreview} loading={flowRendering}>
+            ▶ 全片预览
+          </Button>
+        </div>
+      </header>
+
+      <div className="flex min-h-0 flex-1">
       {/* 左侧资产池 */}
-      <aside className="flex w-56 shrink-0 flex-col gap-2 overflow-y-auto border-r border-zinc-300 bg-white p-3">
+      <aside className="flex w-56 shrink-0 flex-col gap-2 overflow-y-auto border-r border-border-strong bg-surface p-3">
         <h2 className="text-sm font-bold">角色资产池（拖图上镜头）</h2>
-        <p className="text-xs text-zinc-500">按角色分组；点「换图」或直接拖到镜头。快捷键 B/S 选对象 · R 重跑分镜。</p>
+        <p className="text-xs text-text-muted">按角色分组；点「换图」或直接拖到镜头。快捷键 B/S 选对象 · R 重跑分镜。</p>
 
         {/* AI 建议 chips（docs/06 P3） */}
         {(suggestions.runs.length > 0 || suggestions.missingVoice > 0) && (
@@ -546,9 +567,9 @@ function StoryboardCanvas() {
           );
           return (
             <div key={c.id}>
-              <p className="mt-1 text-[11px] font-semibold text-zinc-500">
+              <p className="mt-1 text-[11px] font-semibold text-text-muted">
                 {c.canonical_name}
-                <span className="ml-1 text-zinc-300">{charAssets.length}</span>
+                <span className="ml-1 text-text-subtle">{charAssets.length}</span>
               </p>
               <div className="grid grid-cols-2 gap-1">
                 {charAssets.map((a: any) => (
@@ -558,9 +579,13 @@ function StoryboardCanvas() {
                     onDragStart={(e) => {
                       e.dataTransfer.setData("application/x-asset-id", a.id);
                       setDraggingAsset(true);
+                      setDraggingAssetId(a.id);
                     }}
-                    onDragEnd={() => setDraggingAsset(false)}
-                    className={`cursor-grab rounded-lg border border-zinc-200 p-1 active:cursor-grabbing hover:border-indigo-400 ${dropShake ? "animate-pulse" : ""}`}
+                    onDragEnd={() => {
+                      setDraggingAsset(false);
+                      setDraggingAssetId(null);
+                    }}
+                    className={`cursor-grab rounded-lg border border-border p-1 active:cursor-grabbing hover:border-accent ${draggingAssetId === a.id ? "opacity-60" : ""} ${dropShake ? "nc-shake" : ""}`}
                     title={a.prompt ?? ""}
                   >
                     {a.url && (
@@ -575,9 +600,9 @@ function StoryboardCanvas() {
           );
         })}
         <div>
-          <p className="mt-1 text-[11px] font-semibold text-zinc-500">背景（检查器里换）</p>
+          <p className="mt-1 text-[11px] font-semibold text-text-muted">背景（检查器里换）</p>
           {(data.assets ?? []).filter((a: any) => a.kind === "background").map((a: any) => (
-            <div key={a.id} className="mt-1 flex items-center gap-1 rounded border border-zinc-200 p-1">
+            <div key={a.id} className="mt-1 flex items-center gap-1 rounded border border-border p-1">
               {a.url && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={a.url} alt="" className="aspect-video w-full rounded object-cover" />
@@ -587,7 +612,7 @@ function StoryboardCanvas() {
           ))}
         </div>
         <div className="mt-auto space-y-2">
-          <button onClick={() => rerun("storyboard")} className="w-full rounded-lg border border-zinc-900 px-2 py-2 text-xs">
+          <button onClick={() => rerun("storyboard")} className="w-full rounded-lg border border-text px-2 py-2 text-xs">
             重跑分镜
           </button>
           <button onClick={() => rerun("voice")} className="w-full rounded-lg border px-2 py-2 text-xs">
@@ -601,10 +626,10 @@ function StoryboardCanvas() {
             ▶ 全片预览（后台渲染）
           </Button>
           {flowVideoUrl && (
-            <video controls src={flowVideoUrl} className="w-full rounded-lg border bg-black" />
+            <video controls src={flowVideoUrl} className="w-full rounded-lg border bg-surface-invert" />
           )}
           {confirmingNode && (
-            <div className="rounded-lg border border-review/40 bg-review/10 p-2 text-[10px] text-review">
+            <div className="rounded-lg border border-accent/40 bg-accent/10 p-2 text-[10px] text-accent">
               <p className="font-semibold">确认重跑？</p>
               <p className="mt-1 text-text-muted">{data.estimates?.[confirmingNode] ?? "影响未知"}</p>
               <div className="mt-1 flex gap-1">
@@ -650,10 +675,10 @@ function StoryboardCanvas() {
       </div>
 
       {/* 右侧检查器 */}
-      <aside className="flex w-80 shrink-0 flex-col gap-3 overflow-y-auto border-l border-zinc-300 bg-white p-4 text-xs">
+      <aside className="flex w-80 shrink-0 flex-col gap-3 overflow-y-auto border-l border-border-strong bg-surface p-4 text-xs">
         <h2 className="text-sm font-bold">检查器</h2>
         {!selectedShot && !selectedBeat && (
-          <p className="text-zinc-400">点击上方 beat 卡片改说话人/台词；点击镜头卡片改画面。</p>
+          <p className="text-text-subtle">点击上方 beat 卡片改说话人/台词；点击镜头卡片改画面。</p>
         )}
 
         {selectedBeat && (
@@ -702,7 +727,7 @@ function StoryboardCanvas() {
                 />
               </label>
             </div>
-            <p className="mt-1.5 text-[10px] text-zinc-400">
+            <p className="mt-1.5 text-[10px] text-text-subtle">
               自动保存{selectedTake?.error ? " · 本句有红项" : ""}
             </p>
             {selectedTake ? (
@@ -725,7 +750,7 @@ function StoryboardCanvas() {
                 🔊 补配音（走重跑流程）
               </Button>
             )}
-            <p className="mt-2 text-[10px] text-zinc-500">
+            <p className="mt-2 text-[10px] text-text-muted">
               配音：{selectedTake ? <StatusPill table="voice_takes" status={selectedTake?.status} /> : "未合成"}
               {selectedTake?.asr_confidence != null ? ` · ASR ${Math.round(selectedTake.asr_confidence * 100)}%` : ""}
               {selectedTake?.error ? " · 有红项" : ""}
@@ -748,7 +773,7 @@ function StoryboardCanvas() {
               const currentIdx = charAssets.findIndex((a: any) => a.id === firstLayer?.asset_id);
               const showAsset = charAssets[currentIdx >= 0 ? currentIdx : 0];
               return (
-                <div className="rounded-lg border border-zinc-300 bg-zinc-900 p-1">
+                <div className="rounded-lg border border-border-strong bg-surface-invert p-1">
                   <div className="relative aspect-video">
                     {showAsset?.url && (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -768,7 +793,7 @@ function StoryboardCanvas() {
                             }));
                           }
                         }}
-                        className="rounded-full bg-white/80 px-2 py-0.5 text-xs"
+                        className="rounded-full bg-surface/80 px-2 py-0.5 text-xs"
                       >
                         ◀ 换图
                       </button>
@@ -785,13 +810,13 @@ function StoryboardCanvas() {
                             }));
                           }
                         }}
-                        className="rounded-full bg-white/80 px-2 py-0.5 text-xs"
+                        className="rounded-full bg-surface/80 px-2 py-0.5 text-xs"
                       >
                         换图 ▶
                       </button>
                     </div>
                   </div>
-                  <div className="mt-1 flex items-center justify-between px-1 text-[10px] text-white/80">
+                  <div className="mt-1 flex items-center justify-between px-1 text-[10px] text-inverse/80">
                     <span>{showAsset?.title ?? "无人物图"}</span>
                     <Button
                       size="sm"
@@ -799,19 +824,19 @@ function StoryboardCanvas() {
                       onClick={() => previewShot(selectedShot.id)}
                       disabled={previewBusy === selectedShot.id}
                       loading={previewBusy === selectedShot.id}
-                      className="rounded bg-white/20 hover:bg-white/40"
+                      className="rounded bg-surface/20 hover:bg-surface/40"
                     >
                       ▶ 预览本镜头
                     </Button>
                   </div>
                   {shotPreview?.shotId === selectedShot.id && shotPreview && (
-                    <video controls autoPlay src={shotPreview.url} className="mt-1 w-full rounded bg-black" />
+                    <video controls autoPlay src={shotPreview.url} className="mt-1 w-full rounded bg-surface-invert" />
                   )}
                 </div>
               );
             })()}
             <div className="rounded-lg border p-2">
-              <p className="font-semibold">镜头 {selectedShot.idx} <span className="font-normal text-zinc-400">（自动保存）</span></p>
+              <p className="font-semibold">镜头 {selectedShot.idx} <span className="font-normal text-text-subtle">（自动保存）</span></p>
               <label className="mt-1 block">机位
                 <select value={String(cur(`shot:${selectedShot.id}`, selectedShot, "camera") ?? "static")}
                   onChange={(e) => quickEdit("shots", selectedShot.id, "camera", e.target.value)}
@@ -859,7 +884,7 @@ function StoryboardCanvas() {
               );
               return (
                 <div key={layer.id} className="rounded-lg border p-2">
-                  <p className="font-semibold">图层 {layer.idx} · {layer.kind} <span className="font-normal text-zinc-400">（自动保存）</span></p>
+                  <p className="font-semibold">图层 {layer.idx} · {layer.kind} <span className="font-normal text-text-subtle">（自动保存）</span></p>
                   <label className="mt-1 block">人物
                     <select value={String(cur(`layer:${layer.id}`, layer, "character_id") ?? "")}
                       onChange={(e) => quickEdit("shot_layers", layer.id, "character_id", e.target.value || null)}
@@ -878,7 +903,7 @@ function StoryboardCanvas() {
                   </label>
                   <div className="mt-1 space-y-1.5">
                     <div>
-                      <p className="text-[10px] text-zinc-400">入场动画（点击即选）</p>
+                      <p className="text-[10px] text-text-subtle">入场动画（点击即选）</p>
                       <div className="mt-0.5 flex flex-wrap gap-1">
                         {ENTER_EXIT.map((x) => (
                           <button
@@ -887,7 +912,7 @@ function StoryboardCanvas() {
                             onClick={() => quickEdit("shot_layers", layer.id, "enter_animation", x)}
                             className={`rounded px-1.5 py-0.5 text-[10px] ${
                               String(cur(`layer:${layer.id}`, layer, "enter_animation") ?? "none") === x
-                                ? "bg-review text-white"
+                                ? "bg-accent text-on-accent"
                                 : "bg-surface-2 text-text-muted hover:bg-surface-3"
                             }`}
                           >
@@ -897,7 +922,7 @@ function StoryboardCanvas() {
                       </div>
                     </div>
                     <div>
-                      <p className="text-[10px] text-zinc-400">退场动画</p>
+                      <p className="text-[10px] text-text-subtle">退场动画</p>
                       <div className="mt-0.5 flex flex-wrap gap-1">
                         {ENTER_EXIT.map((x) => (
                           <button
@@ -906,7 +931,7 @@ function StoryboardCanvas() {
                             onClick={() => quickEdit("shot_layers", layer.id, "exit_animation", x)}
                             className={`rounded px-1.5 py-0.5 text-[10px] ${
                               String(cur(`layer:${layer.id}`, layer, "exit_animation") ?? "none") === x
-                                ? "bg-review text-white"
+                                ? "bg-accent text-on-accent"
                                 : "bg-surface-2 text-text-muted hover:bg-surface-3"
                             }`}
                           >
@@ -922,6 +947,16 @@ function StoryboardCanvas() {
           </>
         )}
       </aside>
+      </div>
+      <ShortcutHelp
+        items={[
+          { keys: "B", label: "循环选择 beat" },
+          { keys: "S", label: "循环选择镜头" },
+          { keys: "R", label: "重跑分镜" },
+          { keys: "Esc", label: "关闭弹层/取消选择" },
+          { keys: "?", label: "打开/关闭快捷键帮助" },
+        ]}
+      />
     </div>
   );
 }
@@ -935,7 +970,7 @@ function BeatNode({ data }: any) {
     }
   }
   return (
-    <div className={`h-full w-full rounded-xl border-2 bg-white p-2 shadow-sm ${data.status === "stale" ? "stale-flash border-stale/50" : "border-zinc-200"}`}>
+    <div className={`h-full w-full rounded-xl border-2 bg-surface p-2 shadow-sm ${data.status === "stale" ? "stale-flash border-stale/50" : "border-border"}`}>
       <p className="text-[11px] font-bold">
         #{data.idx} {data.type} · {data.speaker} · {Number(data.duration).toFixed(1)}s
         {data.voice ? (
@@ -954,7 +989,7 @@ function BeatNode({ data }: any) {
           </button>
         ) : null}
       </p>
-      <p className="mt-1 line-clamp-2 text-[11px] text-zinc-600">{data.text}</p>
+      <p className="mt-1 line-clamp-2 text-[11px] text-text-muted">{data.text}</p>
     </div>
   );
 }
@@ -963,7 +998,7 @@ function ShotNode({ data }: any) {
   const bgClass =
     data.camera === "ken_burns_in" ? "kb-in" : data.camera === "ken_burns_out" ? "kb-out" : data.camera.startsWith("pan") ? "kb-pan" : "";
   return (
-    <div className={`relative h-full w-full overflow-hidden rounded-xl border-2 bg-zinc-900 ${data.status === "stale" ? "stale-flash border-stale/50" : "border-zinc-300"}`}>
+    <div className={`relative h-full w-full overflow-hidden rounded-xl border-2 bg-surface-invert ${data.status === "stale" ? "stale-flash border-stale/50" : "border-border-strong"}`}>
       {data.backgroundUrl && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={data.backgroundUrl} alt="" className={`absolute inset-0 h-full w-full object-cover opacity-80 ${bgClass}`} />
@@ -973,17 +1008,17 @@ function ShotNode({ data }: any) {
           <div key={i} className="relative">
             {l.asset?.url && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={l.asset.url} alt="" className={`h-10 w-8 rounded border border-white/40 object-cover ${l.motion?.type === "breath" ? "kb-breath" : ""}`} />
+              <img src={l.asset.url} alt="" className={`h-10 w-8 rounded border border-surface/40 object-cover ${l.motion?.type === "breath" ? "kb-breath" : ""}`} />
             )}
-            <span className="absolute inset-x-0 bottom-0 bg-black/60 text-center text-[8px] text-white">
+            <span className="absolute inset-x-0 bottom-0 bg-surface-invert/60 text-center text-[8px] text-inverse">
               {l.characterName ?? "?"}
             </span>
           </div>
         ))}
       </div>
-      <div className="absolute left-0 top-0 w-full bg-gradient-to-b from-black/70 to-transparent p-1 text-[10px] text-white">
+      <div className="absolute left-0 top-0 w-full bg-gradient-to-b from-surface-invert/70 to-transparent p-1 text-[10px] text-inverse">
         <p className="font-semibold">{data.camera} · {Number(data.duration).toFixed(1)}s</p>
-        <p className="text-white/70">
+        <p className="text-inverse/70">
           {data.transitionIn} → {data.transitionOut}
           {(data.layers ?? []).some((l: any) => l.enter !== "none" || l.exit !== "none")
             ? ` · ${(data.layers ?? []).map((l: any) => `${l.characterName ?? ""}${l.enter !== "none" ? "进" + l.enter : ""}${l.exit !== "none" ? "退" + l.exit : ""}`).filter(Boolean).join(" ")}`
@@ -997,7 +1032,7 @@ function ShotNode({ data }: any) {
         onPointerUp={() => data.onResizeEnd?.()}
         onPointerCancel={() => data.onResizeEnd?.()}
         title="拖动调整时长"
-        className="absolute right-0 top-0 z-10 h-full w-2.5 cursor-ew-resize border-r-2 border-transparent bg-review/0 transition-colors duration-fast hover:border-review hover:bg-review/30"
+        className="absolute right-0 top-0 z-10 h-full w-2.5 cursor-ew-resize border-r-2 border-transparent bg-accent/0 transition-colors duration-fast hover:border-accent hover:bg-accent/30"
       />
     </div>
   );

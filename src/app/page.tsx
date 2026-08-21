@@ -5,6 +5,11 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { StatusPill } from "@/components/ui/status-badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
 
 interface BookSummary {
   id: string;
@@ -27,6 +32,8 @@ export default function HomePage() {
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<UploadResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [droppedFile, setDroppedFile] = useState<File | null>(null);
 
   const loadBooks = useCallback(async () => {
     try {
@@ -50,7 +57,7 @@ export default function HomePage() {
     const form = e.currentTarget;
     const input = form.elements.namedItem("file") as HTMLInputElement;
     const titleInput = form.elements.namedItem("title") as HTMLInputElement;
-    const file = input.files?.[0];
+    const file = droppedFile ?? input.files?.[0];
     if (!file) {
       setError("请先选择一个 .txt 文件");
       return;
@@ -72,6 +79,7 @@ export default function HomePage() {
       }
       setResult(data);
       form.reset();
+      setDroppedFile(null);
       await loadBooks();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -82,32 +90,44 @@ export default function HomePage() {
 
   return (
     <main className="mx-auto max-w-3xl space-y-8 px-6 py-12">
-      <header>
-        <h1 className="text-2xl font-bold">小说影像化工作台</h1>
-        <p className="mt-2 text-sm text-zinc-500">
-          M0 阶段：上传一章 txt → 编码探测 + 清洗 + 切章。后续节点按 docs/02 流水线逐步接入。
-        </p>
-      </header>
+      <PageHeader
+        title="小说影像化工作台"
+        description="M0 阶段：上传一章 txt → 编码探测 + 清洗 + 切章。后续节点按 docs/02 流水线逐步接入。"
+      />
 
-      <form onSubmit={onSubmit} className="space-y-4 rounded-xl border border-zinc-200 p-6">
-        <label className="block">
-          <span className="text-sm font-medium">书名（可选，默认取文件名）</span>
-          <input
-            name="title"
-            className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
-            placeholder="例如：雨夜疑案"
-          />
-        </label>
+      <form
+        onSubmit={onSubmit}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          const file = e.dataTransfer.files?.[0];
+          if (file) {
+            setDroppedFile(file);
+            setError(null);
+          }
+        }}
+        className={`space-y-4 rounded-xl border p-6 transition-colors duration-fast ${
+          dragOver ? "border-accent bg-accent-soft/40" : "border-border"
+        }`}
+      >
+        <Field label="书名（可选，默认取文件名）" htmlFor="title">
+          <Input id="title" name="title" placeholder="例如：雨夜疑案" />
+        </Field>
 
-        <label className="block">
-          <span className="text-sm font-medium">.txt 文件（≤ 50MB）</span>
-          <input
+        <Field label=".txt 文件（≤ 50MB）" htmlFor="file" hint={droppedFile ? `已选择：${droppedFile.name}` : dragOver ? "松开以上传" : "也可以把文件拖进这个区域"}>
+          <Input
+            id="file"
             name="file"
             type="file"
             accept=".txt,text/plain"
-            className="mt-1 block w-full text-sm text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-4 file:py-2 file:text-sm file:text-white"
+            className="pt-1.5 text-text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-surface-invert file:px-4 file:py-2 file:text-sm file:text-inverse"
           />
-        </label>
+        </Field>
 
         <Button
           type="submit"
@@ -121,7 +141,7 @@ export default function HomePage() {
       <ErrorBanner message={error} />
 
       {result && (
-        <section className="rounded-xl border border-approved/40 bg-approved/10 p-6 text-sm">
+        <Card className="border-approved/40 bg-approved/10 text-sm">
           <h2 className="font-semibold text-approved">解析完成</h2>
           <p className="mt-1 text-approved/80">
             编码：{result.encoding} · 章节数：{result.chapters?.length ?? 0}
@@ -129,7 +149,7 @@ export default function HomePage() {
           {result.book && (
             <Link
               href={`/books/${result.book.id}`}
-              className="mt-3 inline-block rounded-lg bg-approved px-3 py-1.5 text-white hover:bg-approved/85"
+              className="mt-3 inline-block rounded-lg bg-approved px-3 py-1.5 text-inverse hover:bg-approved/85"
             >
               查看章节 →
             </Link>
@@ -141,7 +161,7 @@ export default function HomePage() {
               ))}
             </ul>
           )}
-        </section>
+        </Card>
       )}
 
       <section>
@@ -151,25 +171,24 @@ export default function HomePage() {
             无法读取列表：{listError}（请检查 .env.local 中 SUPABASE_* 配置）
           </p>
         )}
-        <ul className="space-y-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           {books.map((book) => (
-            <li key={book.id}>
-              <Link
-                href={`/books/${book.id}`}
-                className="flex items-center justify-between rounded-lg border border-zinc-200 px-4 py-3 text-sm hover:border-zinc-400"
-              >
-                <span className="font-medium">{book.title}</span>
-                <span className="flex items-center gap-2 text-zinc-500">
-                  {book.total_chars.toLocaleString()} 字
+            <Link key={book.id} href={`/books/${book.id}`} className="block">
+              <Card interactive className="h-full">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-text">{book.title}</span>
                   <StatusPill table="books" status={book.status} />
-                </span>
-              </Link>
-            </li>
+                </div>
+                <p className="mt-1 text-caption text-text-muted">{book.total_chars.toLocaleString()} 字</p>
+              </Card>
+            </Link>
           ))}
           {books.length === 0 && !listError && (
-            <li className="text-sm text-zinc-400">还没有项目，先上传一章试试。</li>
+            <div className="sm:col-span-2">
+              <EmptyState description="还没有项目，先上传一章试试。" />
+            </div>
           )}
-        </ul>
+        </div>
       </section>
     </main>
   );

@@ -31,7 +31,7 @@ export function useToast(): ToastContextValue {
 const TYPE_STYLE: Record<ToastItem["type"], string> = {
   success: "border-approved/40 bg-approved/10 text-approved",
   error: "border-stale/40 bg-stale/10 text-stale",
-  progress: "border-review/40 bg-review/10 text-review",
+  progress: "border-accent/40 bg-accent/10 text-accent",
   info: "border-border-strong bg-surface-2 text-text-muted",
 };
 
@@ -76,7 +76,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               {t.type === "progress" && (
                 <span
                   aria-hidden
-                  className="mr-1 inline-block h-2 w-2 animate-pulse rounded-full bg-current"
+                  className="mr-1 inline-block h-2 w-2 nc-pulse rounded-full bg-current"
                 />
               )}
               {t.message}

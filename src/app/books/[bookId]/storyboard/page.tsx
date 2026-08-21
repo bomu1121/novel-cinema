@@ -1,12 +1,16 @@
 "use client";
 
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { StatusPill } from "@/components/ui/status-badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { JobRunner } from "@/components/jobs/job-runner";
 import { StagedReviewPanel } from "@/components/jobs/staged-review-panel";
 import { useToast } from "@/components/toast";
@@ -150,34 +154,32 @@ export default function StoryboardPage() {
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 px-6 py-12">
-      <header className="flex items-start justify-between">
-        <div>
-          <Link href={`/books/${bookId}`} className="text-sm text-zinc-500 hover:text-zinc-900">
-            ← 返回章节
-          </Link>
-          <h1 className="mt-1 text-2xl font-bold">
-            分镜时间轴 <span className="text-sm font-normal text-zinc-400">签核点 D</span>
-          </h1>
-        </div>
-        <div className="flex gap-2">
-          <JobRunner
-            bookId={bookId}
-            node="storyboard"
-            label="构建分镜"
-            disabled={busy !== null}
-            onRunningChange={(r) => setBusy(r ? "build" : null)}
-            onDone={(jobId) => {
-              toast.push("info", "分镜已生成，进入逐条审阅（应用前不覆盖任何数据）", undefined);
-              setStagedJobId(jobId);
-            }}
-          />
-          {data.timeline && data.timeline.status !== "approved" && (
-            <Button variant="approve" onClick={approve} disabled={busy !== null} loading={busy === "approve"}>
-              批准分镜
-            </Button>
-          )}
-        </div>
-      </header>
+      <PageHeader
+        title="分镜时间轴"
+        meta="签核点 D"
+        backHref={`/books/${bookId}`}
+        backLabel="← 返回章节"
+        actions={
+          <div className="flex gap-2">
+            <JobRunner
+              bookId={bookId}
+              node="storyboard"
+              label="构建分镜"
+              disabled={busy !== null}
+              onRunningChange={(r) => setBusy(r ? "build" : null)}
+              onDone={(jobId) => {
+                toast.push("info", "分镜已生成，进入逐条审阅（应用前不覆盖任何数据）", undefined);
+                setStagedJobId(jobId);
+              }}
+            />
+            {data.timeline && data.timeline.status !== "approved" && (
+              <Button variant="approve" onClick={approve} disabled={busy !== null} loading={busy === "approve"}>
+                批准分镜
+              </Button>
+            )}
+          </div>
+        }
+      />
 
       {stagedJobId && (
         <StagedReviewPanel
@@ -200,22 +202,26 @@ export default function StoryboardPage() {
       <ErrorBanner message={error} />
 
       {data.timeline && (
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-text-muted">
           总时长 {(data.timeline.duration_sec ?? 0).toFixed(1)}s · {data.tracks.length} 个镜头 · 状态{" "}
           <StatusPill table="timelines" status={data.timeline.status} />
         </p>
       )}
 
       {data.tracks.length === 0 && !busy && (
-        <p className="text-sm text-zinc-400">
-          还没有分镜。前置条件：改编脚本 → 资产生成（背景）→ 点“构建分镜”。
-        </p>
+        <EmptyState description="还没有分镜。前置条件：改编脚本 → 资产生成（背景）→ 点“构建分镜”。" />
       )}
 
       <div className="flex gap-4 overflow-x-auto pb-4">
         {data.tracks.map((track) => (
-          <div key={track.shotId} className="w-72 shrink-0 rounded-xl border border-zinc-200 p-3 text-xs">
-            <div className="relative aspect-video overflow-hidden rounded-lg bg-zinc-900">
+          <Card key={track.shotId} className="w-72 shrink-0 p-3 text-xs">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="truncate font-medium text-text">
+                #{track.beatIdx} · {track.camera}
+              </span>
+              <span className="shrink-0 tabular-nums text-text-muted">{track.duration_sec}s</span>
+            </div>
+            <div className="relative aspect-video overflow-hidden rounded-lg bg-surface-invert">
               {track.background_url && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -224,7 +230,7 @@ export default function StoryboardPage() {
                   className={`absolute inset-0 h-full w-full object-cover ${cameraClass(track.camera)}`}
                 />
               )}
-              {track.layers.map((layer, i) => {
+              {(track.layers ?? []).map((layer, i) => {
                 if (layer.kind === "text" || layer.kind === "overlay") {
                   return (
                     <div
@@ -238,11 +244,11 @@ export default function StoryboardPage() {
                       }}
                     >
                       {layer.kind === "text" ? (
-                        <p className="text-center font-semibold text-white [text-shadow:0_1px_4px_rgba(0,0,0,0.9)]">
+                        <p className="text-center font-semibold text-inverse [text-shadow:0_1px_4px_rgba(0,0,0,0.9)]">
                           {layer.text}
                         </p>
                       ) : (
-                        <div className="h-full w-full bg-black/80" />
+                        <div className="h-full w-full bg-surface-invert/80" />
                       )}
                     </div>
                   );
@@ -269,12 +275,12 @@ export default function StoryboardPage() {
             <p className="mt-2 font-medium">
               #{track.beatIdx} · {track.camera} · {track.duration_sec}s
             </p>
-            <p className="mt-1 line-clamp-2 text-zinc-500" title={track.text}>
-              {track.description}
+            <p className="mt-1 line-clamp-2 text-text-muted" title={track.text ?? ""}>
+              {track.description ?? ""}
             </p>
 
             <div className="mt-2 flex items-center gap-1">
-              <input
+              <Input
                 type="number"
                 step={0.5}
                 min={0.5}
@@ -282,14 +288,14 @@ export default function StoryboardPage() {
                 onChange={(e) =>
                   setDurations((prev) => ({ ...prev, [track.shotId]: Number(e.target.value) }))
                 }
-                className="w-16 rounded border border-zinc-300 px-1.5 py-1"
+                className="w-16"
               />
-              <select
+              <Select
                 value={backgrounds[track.shotId] ?? ""}
                 onChange={(e) =>
                   setBackgrounds((prev) => ({ ...prev, [track.shotId]: e.target.value }))
                 }
-                className="flex-1 rounded border border-zinc-300 px-1 py-1"
+                className="flex-1"
               >
                 <option value="">（无背景）</option>
                 {data.backgrounds.map((b) => (
@@ -297,15 +303,15 @@ export default function StoryboardPage() {
                     {b.title ?? b.id.slice(0, 8)}
                   </option>
                 ))}
-              </select>
+              </Select>
               <button
                 onClick={() => saveShot(track)}
-                className="rounded border border-zinc-300 px-2 py-1 hover:border-zinc-900"
+                className="rounded border border-border-strong px-2 py-1 hover:border-text"
               >
                 存
               </button>
             </div>
-          </div>
+          </Card>
         ))}
       </div>
     </main>

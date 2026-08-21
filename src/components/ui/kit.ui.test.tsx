@@ -5,6 +5,15 @@ import { Button } from "./button";
 import { ErrorBanner } from "./error-banner";
 import { SectionCard } from "./section-card";
 import { StatusBadge, StatusPill } from "./status-badge";
+import { EmptyState } from "./empty-state";
+import { Field } from "./field";
+import { Input } from "./input";
+import { Select } from "./select";
+import { Textarea } from "./textarea";
+import { Card } from "./card";
+import { ListRow } from "./list-row";
+import { PageHeader } from "./page-header";
+import { PhaseRail } from "./phase-rail";
 import { ToastProvider } from "../toast";
 
 function renderWithAxe(ui: React.ReactElement) {
@@ -57,6 +66,75 @@ describe("UI kit（docs/06 §6.1）", () => {
     render(<SectionCard title="全书档案">内容区</SectionCard>);
     expect(screen.getByText("全书档案")).toBeTruthy();
     expect(screen.getByText("内容区")).toBeTruthy();
+  });
+
+  it("EmptyState：说明必渲染，标题/动作可选；不带按钮时无多余交互", () => {
+    const { rerender } = render(
+      <EmptyState title="还没有分镜" description="先跑改编，再点构建分镜。" />,
+    );
+    expect(screen.getByText("还没有分镜")).toBeTruthy();
+    expect(screen.getByText("先跑改编，再点构建分镜。")).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
+
+    rerender(<EmptyState description="还没有项目" action={<Button>上传</Button>} />);
+    expect(screen.getByRole("button", { name: "上传" })).toBeTruthy();
+  });
+
+  it("Field/Input/Select/Textarea：标签/提示/错误与统一控件状态", () => {
+    const { rerender } = render(
+      <Field label="书名" htmlFor="book-title" error="必填">
+        <Input id="book-title" invalid placeholder="书名" />
+      </Field>,
+    );
+    expect(screen.getByLabelText("书名")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("必填");
+    expect(screen.getByLabelText("书名")).toHaveAttribute("aria-invalid", "true");
+
+    rerender(
+      <Field label="书名" htmlFor="book-title" hint="支持中文">
+        <Input id="book-title" placeholder="书名" />
+      </Field>,
+    );
+    expect(screen.getByText("支持中文")).toBeTruthy();
+
+    render(<Select aria-label="角色" defaultValue="林晚"><option>林晚</option></Select>);
+    expect(screen.getByLabelText("角色")).toBeTruthy();
+
+    render(<Textarea aria-label="备注" mono placeholder="JSON" />);
+    const ta = screen.getByLabelText("备注");
+    expect(ta.className).toContain("font-mono");
+  });
+
+  it("Card：标题/动作/选中态；ListRow：leading/trailing", () => {
+    render(
+      <Card title="全书档案" actions={<Button size="sm">操作</Button>} selected>
+        内容区
+      </Card>,
+    );
+    expect(screen.getByText("全书档案")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "操作" })).toBeTruthy();
+
+    render(
+      <ul>
+        <ListRow leading={<span>章节 1</span>} trailing={<span>4,200 字</span>}>
+          正文
+        </ListRow>
+      </ul>,
+    );
+    expect(screen.getByText("章节 1")).toBeTruthy();
+    expect(screen.getByText("4,200 字")).toBeTruthy();
+  });
+
+  it("PageHeader/PhaseRail：统一页头与流程铁路", () => {
+    render(
+      <PageHeader title="改编脚本" meta="签核 B" backHref="/" backLabel="← 返回" actions={<Button>运行</Button>} />,
+    );
+    expect(screen.getByRole("heading", { name: /改编脚本/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "← 返回" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "运行" })).toBeTruthy();
+
+    const { container } = render(<PhaseRail current={2} />);
+    expect(container.querySelector('[aria-current="step"]')?.textContent).toContain("改编");
   });
 
   it("可达性：kit 组合渲染无 axe critical/serious 违规", async () => {
