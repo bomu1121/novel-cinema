@@ -230,14 +230,14 @@ P10 publish.package        ── 平台规格导出
 
 | beat | 镜头规则 |
 |---|---|
-| narration | 宽景/环境图，Ken Burns（zoom 交替 in/out），≥4s |
-| dialogue | 说话人近景 2.5~6s；同一人连续 >8s 插听者反应镜头；对白切换 = cut |
-| action | 2~3 个短镜头，每个 2.5~4s，节奏快 |
+| narration | 宽景/环境图，**默认静止**；动效（Ken Burns 等）由用户在画布/编排台显式选择 |
+| dialogue | 说话人近景 2.5~6s，**默认静止**；同一人连续 >8s 插听者反应镜头；对白切换 = cut |
+| action | 2~3 个短镜头，每个 2.5~4s，节奏快，**默认静止** |
 | insert_card | 全屏文字卡，3~5s，fade in/out |
-| montage | 多背景 2s 快切，crossfade |
+| montage | 多背景 2s 快切，crossfade，**默认静止** |
 | transition | 黑场/文字卡，≤1.5s |
 | 通用 | 新地点首个镜头 = 远景建立；场景切换 = crossfade；时间跳跃 = dip_to_black |
-| 图层 | 角色在 beat 开始时 enter（首现 fade_in，离场 slide/fade_out）；换表情 = 同层换 asset + 0.3s crossfade；每 shot 至少一个图层有 motion（breath/zoom/pan） |
+| 图层 | 角色在 beat 开始时 enter（首现 fade_in，离场 fade_out）；换表情 = 同层换 asset + 0.3s crossfade；角色图层呼吸动效保留（幅度小） |
 
 输出：`shots + shot_layers` 全部可被渲染器直接消费；每层 `motion` 保证“画面一直在动”，解决“静态图不够生动”的第一层。
 
