@@ -287,6 +287,32 @@ function buildShotsForBeat(beat: BeatRow, ctx: StoryboardContext, beatIndex: num
   }
 }
 
+/**
+ * 相同画面硬切修复：同 beat 内相邻两个镜头若背景/图层/机位完全相同且是硬切，
+ * 合并成一个镜头（避免观众看到“闪一下”的无意义切）。
+ */
+export function mergeDuplicateShots(drafts: ShotDraft[]): ShotDraft[] {
+  const result: ShotDraft[] = [];
+  for (const draft of drafts) {
+    const last = result[result.length - 1];
+    const sameBeat = last && last.beatId === draft.beatId;
+    const sameVisual =
+      last &&
+      last.backgroundAssetId === draft.backgroundAssetId &&
+      last.camera === draft.camera &&
+      JSON.stringify(last.layers) === JSON.stringify(draft.layers);
+    const hardCut = last && last.transitionOut === "cut" && draft.transitionIn === "cut";
+
+    if (sameBeat && sameVisual && hardCut) {
+      last.durationSec = Number((last.durationSec + draft.durationSec).toFixed(2));
+      last.transitionOut = draft.transitionOut;
+    } else {
+      result.push({ ...draft, layers: draft.layers.map((layer) => ({ ...layer })) });
+    }
+  }
+  return result;
+}
+
 export interface BuildStoryboardResult {
   adaptedChapterId: string;
   timelineId: string;
@@ -353,10 +379,15 @@ export async function buildStoryboard(
     await supabase.from("shots").delete().in("id", oldShotIds);
   }
 
-  const drafts: ShotDraft[] = [];
-  beats.forEach((beat, beatIndex) => {
-    drafts.push(...buildShotsForBeat(beat, ctx, beatIndex));
-  });
+  const drafts: ShotDraft[] = mergeDuplicateShots(
+    (() => {
+      const list: ShotDraft[] = [];
+      beats.forEach((beat, beatIndex) => {
+        list.push(...buildShotsForBeat(beat, ctx, beatIndex));
+      });
+      return list;
+    })(),
+  );
 
   // 人物入场/出场：本章内角色首次出现的镜头淡入，最后一次出现的镜头淡出
   const firstBeatIdx = new Map<string, number>();

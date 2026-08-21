@@ -58,7 +58,10 @@ describe("SeedreamProvider", () => {
   });
 
   it("背景 16:9 / 竖版 9:16 使用对应尺寸", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(okImages(1));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(okImages(1))
+      .mockResolvedValueOnce(okImages(1));
     vi.stubGlobal("fetch", fetchMock);
 
     await getImageProvider().generate({ kind: "background", prompt: "wide", aspect: "16:9", count: 1 });
