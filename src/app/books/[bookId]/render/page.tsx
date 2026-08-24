@@ -104,24 +104,33 @@ export default function RenderPage() {
           <div className="space-y-2">
             {data.jobs.map((job) => (
               <Card key={job.id} className="text-sm">
-                <div className="flex items-center justify-between">
-                  <p className="font-medium">
-                    {job.scope} · <StatusPill table="render_jobs" status={job.status} />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="font-medium text-text">{job.scope}</span>
+                    <StatusPill table="render_jobs" status={job.status} />
                     {job.duration_sec != null && (
-                      <span className="ml-2 text-xs text-text-muted">{job.duration_sec.toFixed(1)}s</span>
+                      <span className="text-caption text-text-muted">{job.duration_sec.toFixed(1)}s</span>
                     )}
-                  </p>
-                  <p className="text-xs text-text-subtle">{new Date(job.created_at).toLocaleString()}</p>
+                  </div>
+                  <span className="text-caption text-text-subtle">
+                    {new Date(job.created_at).toLocaleString()}
+                  </span>
                 </div>
-                {job.error?.message && <p className="mt-1 text-xs text-stale">{job.error.message}</p>}
+                {job.error?.message && (
+                  <p className="mt-2 rounded-lg border border-stale/40 bg-stale/10 px-3 py-2 text-xs text-stale">
+                    {job.error.message}
+                  </p>
+                )}
                 {job.url && (
-                  <a
-                    href={job.url}
-                    target="_blank"
-                    className="mt-2 inline-block text-xs text-accent underline"
-                  >
-                    下载成品 mp4 →
-                  </a>
+                  <div className="mt-3 flex justify-end">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => window.open(job.url!, "_blank", "noopener,noreferrer")}
+                    >
+                      下载成品 mp4 →
+                    </Button>
+                  </div>
                 )}
               </Card>
             ))}

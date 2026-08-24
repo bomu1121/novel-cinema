@@ -136,42 +136,57 @@ export default function VoicePage() {
               row.take?.error ? "border-l-4 border-l-stale border-stale/40 bg-stale/10" : ""
             }`}
           >
-            <div className="flex items-center justify-between">
-              <p className="font-medium">
-                #{row.beat.idx} · {row.beat.speaker_type === "narrator" ? "旁白" : "角色"}
-                <span className="ml-2 text-xs text-text-muted">
-                  {row.beat.emotion} · pace {row.beat.pace}
-                </span>
-              </p>
-              {row.take && (
-                <span className="flex items-center gap-2 text-xs text-text-muted">
-                  <StatusPill table="voice_takes" status={row.take.status} />
-                  {row.take.asr_confidence != null && (
-                    <span className={row.take.asr_confidence < 0.85 ? "text-stale" : ""}>
-                      ASR {Math.round(row.take.asr_confidence * 100)}%
-                    </span>
+            <div className="flex flex-wrap items-start gap-3">
+              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface-2 font-mono text-caption text-text-muted">
+                #{row.beat.idx}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-text">
+                    {row.beat.speaker_type === "narrator" ? "旁白" : "角色"}
+                  </span>
+                  <span className="text-caption text-text-muted">
+                    {row.beat.emotion} · pace {row.beat.pace}
+                  </span>
+                  {row.take && (
+                    <>
+                      <StatusPill table="voice_takes" status={row.take.status} />
+                      {row.take.asr_confidence != null && (
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-caption ${
+                            row.take.asr_confidence < 0.85
+                              ? "bg-stale/10 text-stale"
+                              : "bg-approved/10 text-approved"
+                          }`}
+                        >
+                          ASR {Math.round(row.take.asr_confidence * 100)}%
+                        </span>
+                      )}
+                    </>
                   )}
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => redo(row.take!.id)}
-                    disabled={busy !== null}
-                    loading={busy === row.take.id}
-                  >
-                    重录
-                  </Button>
-                </span>
+                </div>
+                <p className="mt-1 text-text">{row.beat.text}</p>
+                {row.take?.error?.message && (
+                  <p className="mt-1 text-xs text-stale">{row.take.error.message}</p>
+                )}
+                {row.url ? (
+                  <audio controls src={row.url} className="mt-2 h-8 w-full" />
+                ) : (
+                  row.take && <p className="mt-1 text-xs text-text-subtle">（音频预览不可用）</p>
+                )}
+              </div>
+              {row.take && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => redo(row.take!.id)}
+                  disabled={busy !== null}
+                  loading={busy === row.take.id}
+                >
+                  重录
+                </Button>
               )}
             </div>
-            <p className="mt-1 text-text">{row.beat.text}</p>
-            {row.take?.error?.message && (
-              <p className="mt-1 text-xs text-stale">{row.take.error.message}</p>
-            )}
-            {row.url ? (
-              <audio controls src={row.url} className="mt-2 h-8 w-full" />
-            ) : (
-              row.take && <p className="mt-1 text-xs text-text-subtle">（音频预览不可用）</p>
-            )}
           </Card>
         ))}
       </div>
