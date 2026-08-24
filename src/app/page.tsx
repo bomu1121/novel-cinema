@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { StatusPill } from "@/components/ui/status-badge";
@@ -35,6 +35,8 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [droppedFile, setDroppedFile] = useState<File | null>(null);
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadBooks = useCallback(async () => {
     try {
@@ -81,6 +83,7 @@ export default function HomePage() {
       setResult(data);
       form.reset();
       setDroppedFile(null);
+      setSelectedFileName(null);
       await loadBooks();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -141,15 +144,65 @@ export default function HomePage() {
           <Input id="title" name="title" placeholder="例如：雨夜疑案（可选）" />
         </Field>
 
-        <Field label=".txt 文件（≤ 50MB）" htmlFor="file" hint={droppedFile ? `已选择：${droppedFile.name}` : dragOver ? "松开以上传" : "也可以把文件拖进这个区域"}>
-          <Input
-            id="file"
-            name="file"
-            type="file"
-            accept=".txt,text/plain"
-            className="text-text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-accent file:px-4 file:py-2 file:text-sm file:text-on-accent"
-          />
-        </Field>
+        <div>
+          <span className="text-overline font-medium uppercase tracking-widest text-text-muted">
+            .txt 文件（≤ 50MB）
+          </span>
+          <label
+            htmlFor="file"
+            className={`mt-2 flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors duration-fast ${
+              dragOver
+                ? "border-accent bg-accent-soft/40"
+                : selectedFileName
+                  ? "border-accent/60 bg-accent-soft/20 hover:border-accent hover:bg-accent-soft/30"
+                  : "border-border hover:border-accent/50 hover:bg-surface-1"
+            }`}
+          >
+            <input
+              ref={fileInputRef}
+              id="file"
+              name="file"
+              type="file"
+              accept=".txt,text/plain"
+              className="sr-only"
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null;
+                if (file) {
+                  setDroppedFile(file);
+                  setSelectedFileName(file.name);
+                  setError(null);
+                }
+                e.target.value = "";
+              }}
+            />
+            <span
+              className={`flex h-11 w-11 items-center justify-center rounded-full transition-colors duration-fast ${
+                dragOver ? "bg-accent text-on-accent" : "bg-accent/10 text-accent"
+              }`}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-5 w-5"
+                aria-hidden="true"
+              >
+                <path d="M12 16V4" />
+                <path d="m6 10 6-6 6 6" />
+                <path d="M4 20h16" />
+              </svg>
+            </span>
+            <span className="mt-3 text-body font-medium text-text">
+              {selectedFileName ?? (dragOver ? "松开以上传" : "选择或拖拽 .txt 文件")}
+            </span>
+            <span className="mt-1 text-caption text-text-muted">
+              {selectedFileName ? "点击可重新选择" : "支持 .txt / text/plain，≤ 50MB"}
+            </span>
+          </label>
+        </div>
 
         <Button
           type="submit"
