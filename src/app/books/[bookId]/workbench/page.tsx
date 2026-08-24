@@ -62,6 +62,15 @@ export default function WorkbenchPage() {
   const [rerunNodeName, setRerunNodeName] = useState<string | null>(null);
   const isStagedNode = rerunNodeName === "adapt" || rerunNodeName === "storyboard";
   const [paletteOpen, setPaletteOpen] = useState(false);
+  /** per-node 自主性预设（docs/07 I2 / P4-D）：direct 直接入队、notify 入队后通知、review 先预演 */
+  const [autonomy, setAutonomy] = useState<Record<string, "direct" | "notify" | "review">>({
+    analyze: "direct",
+    adapt: "review",
+    "assets-phase1": "direct",
+    "assets-phase2": "direct",
+    storyboard: "review",
+    voice: "direct",
+  });
 
   // Cmd+K 命令面板
   useEffect(() => {
@@ -74,43 +83,6 @@ export default function WorkbenchPage() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-
-  const paletteItems = useMemo(() => {
-    const pages: Array<[string, string, string]> = [
-      ["bible", "全书档案 / 签核 A", `/books/${bookId}/bible`],
-      ["script", "改编脚本 / 签核 B", `/books/${bookId}/script`],
-      ["assets", "资产库 / 签核 C", `/books/${bookId}/assets`],
-      ["storyboard", "分镜时间轴 / 签核 D", `/books/${bookId}/storyboard`],
-      ["voice", "多角色配音 / 签核 E", `/books/${bookId}/voice`],
-      ["render", "渲染 / 签核 F", `/books/${bookId}/render`],
-      ["canvas", "分镜画布", `/books/${bookId}/canvas`],
-    ];
-    return [
-      ...pages.map(([id, label, href]) => ({
-        id: `page:${id}`,
-        label: `打开 ${label}`,
-        hint: "页面",
-        run: () => {
-          window.location.href = href;
-        },
-      })),
-      ...(
-        [
-          ["analyze", "① 分析+风格候选"],
-          ["adapt", "② 改编脚本"],
-          ["assets-phase1", "③a 设定图+背景"],
-          ["assets-phase2", "③b 表情变体"],
-          ["storyboard", "④ 分镜"],
-          ["voice", "⑤ 配音"],
-        ] as const
-      ).map(([node, label]) => ({
-        id: `rerun:${node}`,
-        label: `重跑 ${label}`,
-        hint: "重跑",
-        run: () => rerun(node, label),
-      })),
-    ];
-  }, [bookId]);
 
   async function undo() {
     try {
@@ -236,7 +208,7 @@ export default function WorkbenchPage() {
     }
   }
 
-  async function executeRerun(node: string) {
+  const executeRerun = useCallback(async (node: string) => {
     setError(null);
     try {
       const res = await fetch(`/api/books/${bookId}/jobs`, {
@@ -254,11 +226,57 @@ export default function WorkbenchPage() {
     } catch (err) {
       toast.push("error", err instanceof Error ? err.message : String(err));
     }
-  }
+  }, [bookId, toast]);
 
-  function rerun(node: string, label: string) {
-    setConfirming({ node, label });
-  }
+  const rerun = useCallback(
+    (node: string, label: string) => {
+      const mode = autonomy[node] ?? "review";
+      if (mode === "direct" || mode === "notify") {
+        if (mode === "notify") toast.push("info", `${label} 已入队，完成后通知`, undefined);
+        void executeRerun(node);
+      } else {
+        setConfirming({ node, label });
+      }
+    },
+    [autonomy, executeRerun, toast],
+  );
+
+  const paletteItems = useMemo(() => {
+    const pages: Array<[string, string, string]> = [
+      ["bible", "全书档案 / 签核 A", `/books/${bookId}/bible`],
+      ["script", "改编脚本 / 签核 B", `/books/${bookId}/script`],
+      ["assets", "资产库 / 签核 C", `/books/${bookId}/assets`],
+      ["storyboard", "分镜时间轴 / 签核 D", `/books/${bookId}/storyboard`],
+      ["voice", "多角色配音 / 签核 E", `/books/${bookId}/voice`],
+      ["render", "渲染 / 签核 F", `/books/${bookId}/render`],
+      ["canvas", "分镜画布", `/books/${bookId}/canvas`],
+    ];
+    return [
+      ...pages.map(([id, label, href]) => ({
+        id: `page:${id}`,
+        label: `打开 ${label}`,
+        hint: "页面",
+        run: () => {
+          window.location.href = href;
+        },
+      })),
+      ...(
+        [
+          ["analyze", "① 分析+风格候选"],
+          ["adapt", "② 改编脚本"],
+          ["assets-phase1", "③a 设定图+背景"],
+          ["assets-phase2", "③b 表情变体"],
+          ["storyboard", "④ 分镜"],
+          ["voice", "⑤ 配音"],
+        ] as const
+      ).map(([node, label]) => ({
+        id: `rerun:${node}`,
+        label: `重跑 ${label}`,
+        hint: "重跑",
+        run: () => rerun(node, label),
+      })),
+    ];
+  }, [bookId, rerun]);
 
   const cur = (key: string, row: any, field: string) => edits[key]?.[field] ?? row?.[field];
 
@@ -301,16 +319,32 @@ export default function WorkbenchPage() {
               ["voice", "⑤ 配音"],
             ] as const
           ).map(([node, label]) => (
-            <Button
-              key={node}
-              size="sm"
-              variant="secondary"
-              onClick={() => rerun(node, label)}
-              disabled={busy !== null}
-              loading={busy === `rerun:${node}`}
-            >
-              {label}
-            </Button>
+            <div key={node} className="flex items-center gap-1">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => rerun(node, label)}
+                disabled={busy !== null}
+                loading={busy === `rerun:${node}`}
+              >
+                {label}
+              </Button>
+              <Select
+                aria-label={`${label} 自主性`}
+                value={autonomy[node] ?? "review"}
+                onChange={(e) =>
+                  setAutonomy((prev) => ({
+                    ...prev,
+                    [node]: e.target.value as "direct" | "notify" | "review",
+                  }))
+                }
+                className="max-w-28"
+              >
+                <option value="direct">直接</option>
+                <option value="notify">通知</option>
+                <option value="review">预演</option>
+              </Select>
+            </div>
           ))}
         </div>
 
