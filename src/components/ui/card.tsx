@@ -29,11 +29,11 @@ export function Card({
 }: CardProps) {
   return (
     <div
-      className={`rounded-lg border bg-surface ${
+      className={`rounded-lg border bg-surface shadow-card ${
         selected
           ? "border-accent bg-accent-soft/40 ring-1 ring-accent/30"
           : interactive
-            ? "border-border transition-colors duration-fast hover:border-border-strong hover:shadow-card"
+            ? "border-border transition-all duration-fast hover:-translate-y-0.5 hover:border-border-strong hover:shadow-pop"
             : "border-border"
       } ${interactive ? "cursor-pointer" : ""} ${className}`}
       {...rest}

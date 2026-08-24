@@ -11,7 +11,7 @@ export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
 }
 
 const BASE =
-  "h-10 w-full appearance-none rounded-md border bg-surface px-3 pr-8 text-body text-text transition-colors duration-fast focus:outline-none disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-text-subtle";
+  "h-10 w-full appearance-none rounded-md border bg-surface px-3 pr-8 text-body text-text transition-all duration-fast focus:shadow-card focus:outline-none disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-text-subtle";
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
   { invalid, className = "", children, ...rest },

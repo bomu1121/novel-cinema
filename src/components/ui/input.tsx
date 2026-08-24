@@ -10,7 +10,7 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 const BASE =
-  "h-10 w-full rounded-md border bg-surface px-3 text-body text-text placeholder:text-text-subtle transition-colors duration-fast focus:outline-none disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-text-subtle";
+  "h-10 w-full rounded-md border bg-surface px-3 text-body text-text placeholder:text-text-subtle transition-all duration-fast focus:shadow-card focus:outline-none disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-text-subtle";
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   { invalid, className = "", ...rest },

@@ -95,6 +95,28 @@ export default function HomePage() {
         description="M0 阶段：上传一章 txt → 编码探测 + 清洗 + 切章。后续节点按 docs/02 流水线逐步接入。"
       />
 
+      <section className="rounded-xl border border-accent/20 bg-accent-soft/40 p-6 sm:p-8">
+        <p className="text-overline font-medium uppercase tracking-widest text-accent">AI 影像化工作台</p>
+        <h2 className="mt-1 font-display text-display font-semibold tracking-tight text-text">
+          把小说变成影像
+        </h2>
+        <p className="mt-2 max-w-2xl text-body leading-6 text-text-muted">
+          上传一章 txt，经过全书理解、章节改编、分层资产、多角色配音与确定性渲染，
+          产出可发布的视频作品。
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {["分析", "改编", "资产", "配音", "渲染"].map((step, i) => (
+            <span
+              key={step}
+              className="inline-flex items-center gap-1 rounded-full border border-accent/30 bg-surface px-2.5 py-1 text-caption text-accent"
+            >
+              <span className="font-mono text-[10px]">{i + 1}</span>
+              {step}
+            </span>
+          ))}
+        </div>
+      </section>
+
       <form
         onSubmit={onSubmit}
         onDragOver={(e) => {

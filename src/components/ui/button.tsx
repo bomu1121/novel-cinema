@@ -20,10 +20,10 @@ const SIZE_STYLE: Record<NonNullable<ButtonProps["size"]>, string> = {
 };
 
 const VARIANT_STYLE: Record<NonNullable<ButtonProps["variant"]>, string> = {
-  primary: "bg-accent text-on-accent hover:bg-accent-hover active:bg-accent-active",
-  secondary: "border border-border bg-surface-2 text-text hover:bg-surface-3 active:bg-surface-3",
+  primary: "bg-accent text-on-accent shadow-card hover:bg-accent-hover active:bg-accent-active",
+  secondary: "border border-border bg-surface-2 text-text shadow-card hover:bg-surface-3 active:bg-surface-3",
   ghost: "text-text-muted hover:bg-surface-2 hover:text-text",
-  danger: "bg-stale text-inverse hover:bg-stale/85 active:bg-stale/90",
+  danger: "bg-stale text-inverse shadow-card hover:bg-stale/85 active:bg-stale/90",
   approve: "border border-approved/50 bg-approved/10 text-approved hover:bg-approved/15 active:bg-approved/20",
 };
 
