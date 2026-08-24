@@ -95,6 +95,7 @@ export async function listAssetPlan(bookId: string): Promise<AssetPlan> {
       .from("style_bibles")
       .select("visual_style, negative_prompt, status")
       .eq("book_id", bookId)
+      .eq("status", "approved")
       .order("version", { ascending: false })
       .limit(1)
       .maybeSingle(),
@@ -121,7 +122,7 @@ export async function listAssetPlan(bookId: string): Promise<AssetPlan> {
 
   const style = (styleRes.data ?? null) as StyleForImage | null;
   if (!style) {
-    throw new Error("还没有风格圣经。请先在“全书档案”页运行分析并批准一套风格方案。");
+    throw new Error("还没有已批准的风格圣经。请先在“全书档案”页运行分析并批准一套风格方案。");
   }
   const visualStyle = style.visual_style;
   const negative = negativeText(style);

@@ -3,7 +3,7 @@ import { appendEvent, createJobRow, sweepOrphanJobs, activeJobs } from "@/lib/jo
 import { spawnWorker } from "@/lib/jobs/worker";
 import { estimateNode, type GraphNode } from "@/lib/pipeline/graph";
 
-const VALID_NODES = new Set(["analyze", "adapt", "assets-phase1", "assets-phase2", "storyboard", "voice"]);
+const VALID_NODES = new Set(["analyze", "condense", "adapt", "assets-phase1", "assets-phase2", "storyboard", "voice"]);
 
 type Ctx = { params: Promise<{ bookId: string }> };
 
@@ -16,6 +16,12 @@ export async function POST(request: Request, ctx: Ctx) {
   }
   sweepOrphanJobs();
   const estimate = await estimateNode(bookId, body.node as GraphNode).catch(() => null);
+  if (estimate && estimate.blockers.length > 0) {
+    return NextResponse.json(
+      { error: `前置条件未满足：${estimate.blockers.join("；")}`, blockers: estimate.blockers },
+      { status: 409 },
+    );
+  }
   const input = {
     ...(body.input ?? {}),
     ...(estimate ? { _estimate: { estSeconds: estimate.estSeconds, gate: estimate.gate } } : {}),

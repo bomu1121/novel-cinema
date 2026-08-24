@@ -35,7 +35,7 @@ function parseArgs(argv: string[]): CliArgs {
 
 function run(command: string, args: string[], label: string, cwd?: string): void {
   console.log(`\n[${label}] ${command} ${args.join(" ").slice(0, 400)}`);
-  const result = spawnSync(command, args, { stdio: "inherit", windowsHide: false, cwd });
+  const result = spawnSync(command, args, { stdio: "inherit", windowsHide: true, cwd });
   if (result.status !== 0) {
     throw new Error(`${label} 失败，退出码 ${result.status ?? "null"}`);
   }

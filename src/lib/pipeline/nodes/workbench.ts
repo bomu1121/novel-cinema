@@ -2,16 +2,19 @@
 import { getSupabaseAdmin } from "@/lib/db";
 import { createCheckpoint, latestCheckpointId, revertCheckpoint } from "@/lib/checkpoints";
 import { JobCancelledError, NOOP_REPORTER, type ProgressReporter } from "@/lib/jobs/types";
+import { estimateNode } from "@/lib/pipeline/graph";
 import { persistReviewTasks, handleAdaptationFailure } from "@/lib/review";
 import { AdaptationValidationError, runAdaptation } from "@/lib/pipeline/nodes/adapt";
 import { resolveAssetUrl } from "@/lib/pipeline/nodes/assets";
 import { analyzeChapter, persistChapterAnalysis, persistStyleProposals, proposeStyleBibles } from "@/lib/pipeline/nodes/analyze";
+import { runCondensation } from "@/lib/pipeline/nodes/condense";
 import { generateAssetPhase } from "@/lib/pipeline/nodes/assets";
 import { buildStoryboard } from "@/lib/pipeline/nodes/storyboard";
 import { generateVoiceTakes } from "@/lib/pipeline/nodes/voice";
 
 const EDITABLE_TABLES = new Set([
   "source_chapters",
+  "condensed_chapters",
   "characters",
   "clues",
   "locations",
@@ -93,12 +96,15 @@ export async function getWorkbench(bookId: string) {
     ),
   );
 
-  const estimateNodes: RerunNode[] = ["analyze", "adapt", "assets-phase1", "assets-phase2", "storyboard", "voice"];
-  const estimates = Object.fromEntries(
-    await Promise.all(
+  const estimateNodes: RerunNode[] = ["analyze", "condense", "adapt", "assets-phase1", "assets-phase2", "storyboard", "voice"];
+  const [estimates, nodeBlockers] = await Promise.all([
+    Promise.all(
       estimateNodes.map(async (n) => [n, await estimateRerun(bookId, n).catch(() => "暂无法估算")]),
-    ),
-  );
+    ).then((entries) => Object.fromEntries(entries)),
+    Promise.all(
+      estimateNodes.map(async (n) => [n, (await estimateNode(bookId, n).catch(() => null))?.blockers ?? []]),
+    ).then((entries) => Object.fromEntries(entries)),
+  ]);
 
   return {
     book: bookRes.data,
@@ -117,6 +123,7 @@ export async function getWorkbench(bookId: string) {
     timeline: timelineRes.data,
     renderJobs: jobsRes.data ?? [],
     estimates,
+    nodeBlockers,
   };
 }
 
@@ -208,6 +215,11 @@ export async function estimateRerun(bookId: string, node: RerunNode): Promise<st
       const chars = ch?.char_count ?? 0;
       return `分析 1 章（${chars} 字）· 约 2 次 LLM 调用 · 30~60s · 生成 3 套风格候选`;
     }
+    case "condense": {
+      const { data: ch } = await s.from("source_chapters").select("char_count").eq("book_id", bookId).eq("idx", 1).single();
+      const chars = ch?.char_count ?? 0;
+      return `精简 1 章（${chars} 字 → 约 ${Math.round(chars * 0.35)} 字）· 1 次 LLM 调用 · 30~90s · 会覆盖旧精简稿（可撤销）`;
+    }
     case "adapt": {
       const { data: ch } = await s.from("source_chapters").select("char_count").eq("book_id", bookId).eq("idx", 1).single();
       const chars = ch?.char_count ?? 0;
@@ -241,12 +253,23 @@ async function propagateStale(bookId: string, table: string, id: string): Promis
   const s = getSupabaseAdmin();
   switch (table) {
     case "style_bibles":
+      await s.from("adapted_chapters").update({ status: "stale" }).eq("book_id", bookId);
+      await s.from("condensed_chapters").update({ status: "stale" }).eq("book_id", bookId);
+      break;
     case "clues":
       await s.from("adapted_chapters").update({ status: "stale" }).eq("book_id", bookId);
       break;
     case "source_chapters":
       await s.from("adapted_chapters").update({ status: "stale" }).eq("source_chapter_id", id);
+      await s.from("condensed_chapters").update({ status: "stale" }).eq("source_chapter_id", id);
       break;
+    case "condensed_chapters": {
+      const { data: row } = await s.from("condensed_chapters").select("source_chapter_id").eq("id", id).single();
+      if (row) {
+        await s.from("adapted_chapters").update({ status: "stale" }).eq("source_chapter_id", row.source_chapter_id);
+      }
+      break;
+    }
     case "characters": {
       await s.from("assets").update({ status: "stale" }).eq("character_id", id);
       const { data: beats } = await s.from("beats").select("id").eq("character_id", id);
@@ -279,14 +302,21 @@ async function propagateStale(bookId: string, table: string, id: string): Promis
   }
 }
 
-export type RerunNode = "analyze" | "adapt" | "assets-phase1" | "assets-phase2" | "storyboard" | "voice";
+export type RerunNode =
+  | "analyze"
+  | "condense"
+  | "adapt"
+  | "assets-phase1"
+  | "assets-phase2"
+  | "storyboard"
+  | "voice";
 
 /** 单节点重跑（人工编排的核心操作；reporter 可选，worker 进程内注入进度） */
 export async function rerunNode(
   bookId: string,
   node: RerunNode,
   reporter?: ProgressReporter,
-  input: { chapterId?: string } = {},
+  input: { chapterId?: string; ratio?: number } = {},
 ) {
   const s = getSupabaseAdmin();
   const r = reporter ?? NOOP_REPORTER;
@@ -310,6 +340,23 @@ export async function rerunNode(
       const proposals = await proposeStyleBibles(bookId, analysis, null);
       const styleBibleId = await persistStyleProposals(bookId, proposals);
       return { styleBibleId, recommendedIndex: proposals.recommended_index };
+    }
+    case "condense": {
+      r.step("读取章节", 1, 2);
+      let condenseQuery = s.from("source_chapters").select("id, idx, title, cleaned_text").eq("book_id", bookId);
+      condenseQuery = input.chapterId ? condenseQuery.eq("id", input.chapterId) : condenseQuery.eq("idx", 1);
+      const { data: chapter } = await condenseQuery.single();
+      if (!chapter) throw new Error("没有 idx=1 的章节");
+      if (r.checkCancelled()) throw new JobCancelledError();
+      r.step("AI 精简章节", 2, 2);
+      const ratio = typeof input.ratio === "number" ? input.ratio : undefined;
+      const result = await runCondensation(
+        bookId,
+        { id: chapter.id, idx: chapter.idx, title: chapter.title, cleanedText: chapter.cleaned_text },
+        r,
+        ratio,
+      );
+      return { id: result.id, targetChars: result.targetChars };
     }
     case "adapt": {
       r.step("读取章节", 1, 2);

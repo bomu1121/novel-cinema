@@ -72,7 +72,7 @@ async function main() {
 
   // 签核 A
   if (args.approveAll) {
-    await approveStyleBible(styleBibleId, proposals.recommended_index);
+    await approveStyleBible(bookId, styleBibleId, proposals.recommended_index);
     console.log("签核 A：已批准推荐风格方案");
   } else {
     console.log(`待签核 A：/books/${bookId}/bible 选择一套风格方案`);
@@ -147,10 +147,11 @@ async function main() {
 
   // 6. 渲染
   step("R10 本地渲染");
-  const child = spawnSync("npx", ["tsx", "scripts/render-local.ts", "--book", bookId], {
-    stdio: "inherit",
-    windowsHide: false,
-  });
+  const child = spawnSync(
+    process.execPath,
+    ["--import", "tsx", "scripts/render-local.ts", "--book", bookId],
+    { stdio: "inherit", windowsHide: true },
+  );
   if (child.status !== 0) throw new Error(`渲染退出码 ${child.status}`);
 
   console.log("\n========== 流水线完成 ==========");

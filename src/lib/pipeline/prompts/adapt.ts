@@ -4,6 +4,8 @@ export interface AdaptContextInput {
   chapterIdx: number;
   chapterTitle: string | null;
   chapterText: string;
+  /** 输入文本来源：原文 or 已批准的《精简底稿》 */
+  basis?: "source" | "condensed";
   targetSec: number;
   characters: Array<{ name: string; aliases: string[]; description: string | null; role: string }>;
   clues: Array<{ name: string; description: string; is_spoiler: boolean; is_red_herring: boolean }>;
@@ -37,6 +39,7 @@ export function buildAdaptPrompt(input: AdaptContextInput): string {
   const bible = input.styleBible;
   return [
     `【本章】第 ${input.chapterIdx} 章${input.chapterTitle ? ` · ${input.chapterTitle}` : ""}`,
+    `【输入文本】${input.basis === "condensed" ? "已批准的《精简底稿》——source_span 必须定位到这份底稿，而不是原书" : "原文章节"}`,
     `【时长预算】${input.targetSec} 秒`,
     `【风格圣经】${bible ? `视觉：${bible.visual_style}；旁白：${bible.narration_tone}` : "（未批准，按本章基调自行保守处理）"}`,
     `【剧透规则】${(bible?.spoiler_rules ?? []).join("；") || "无"}`,

@@ -11,13 +11,15 @@ export function PageShell({
   className = "",
   children,
 }: {
-  size?: "narrow" | "default" | "wide";
+  size?: "narrow" | "default" | "wide" | "full";
   className?: string;
   children: ReactNode;
 }) {
-  const width = size === "narrow" ? "max-w-3xl" : size === "wide" ? "max-w-6xl" : "max-w-5xl";
+  const width =
+    size === "narrow" ? "max-w-3xl" : size === "wide" ? "max-w-6xl" : size === "full" ? "max-w-none" : "max-w-5xl";
+  const padding = size === "full" ? "px-3 py-6 sm:px-4" : "px-4 py-6 sm:px-6 lg:px-8";
   return (
-    <main className={`mx-auto w-full ${width} px-4 py-6 sm:px-6 lg:px-8 ${className}`}>
+    <main className={`mx-auto w-full ${width} ${padding} ${className}`}>
       {children}
     </main>
   );

@@ -24,6 +24,14 @@ interface UploadResult {
   book?: { id: string; title: string };
   encoding?: string;
   warnings?: string[];
+  totalChars?: number;
+  report?: {
+    removedLines: number;
+    dedupedLines: number;
+    tailRemoved: boolean;
+    mergedLineBreaks: number;
+    tocLinesSkipped: number;
+  };
   chapters?: Array<{ idx: number; kind: string; title: string | null; charCount: number }>;
 }
 
@@ -219,8 +227,16 @@ export default function HomePage() {
         <Card className="border-approved/40 bg-approved/10 text-sm">
           <h2 className="font-semibold text-approved">解析完成</h2>
           <p className="mt-1 text-approved/80">
-            编码：{result.encoding} · 章节数：{result.chapters?.length ?? 0}
+            编码：{result.encoding} · 章节数：{result.chapters?.length ?? 0} · 总字数：{(result.totalChars ?? 0).toLocaleString()}
           </p>
+          {result.report && (
+            <p className="mt-1 text-approved/80">
+              清洗：删除水印/符号 {result.report.removedLines} 行 · 去重 {result.report.dedupedLines} 行 ·
+              合并断行 {result.report.mergedLineBreaks} 处
+              {result.report.tocLinesSkipped > 0 ? ` · 跳过目录 ${result.report.tocLinesSkipped} 行` : ""}
+              {result.report.tailRemoved ? " · 已移除文末“全文完”标记" : ""}
+            </p>
+          )}
           {result.book && (
             <Link
               href={`/books/${result.book.id}`}

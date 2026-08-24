@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server";
+import { getSupabaseAdmin } from "@/lib/db";
 import { getLatestScript } from "@/lib/pipeline/nodes/adapt";
+import { estimateNode } from "@/lib/pipeline/graph";
 import { listOpenReviewTasks } from "@/lib/review";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   ctx: RouteContext<"/api/books/[bookId]/script">,
 ) {
   const { bookId } = await ctx.params;
   try {
-    const script = await getLatestScript(bookId);
+    const url = new URL(request.url);
+    const chapterId = url.searchParams.get("chapterId") ?? undefined;
+    const script = await getLatestScript(bookId, chapterId);
     // 自检红项已持久化为 review_tasks（jobs 路径），合并回页面渲染
     const tasks = await listOpenReviewTasks(bookId);
     const review = tasks
@@ -23,7 +27,28 @@ export async function GET(
           suggestion: report.suggestion ?? null,
         };
       });
-    return NextResponse.json({ ...script, review });
+    const supabase = getSupabaseAdmin();
+    const [chaptersRes, adaptedRes, adaptEstimate] = await Promise.all([
+      supabase
+        .from("source_chapters")
+        .select("id, idx, title, char_count, status")
+        .eq("book_id", bookId)
+        .order("idx"),
+      supabase
+        .from("adapted_chapters")
+        .select("id, source_chapter_id, title, status")
+        .eq("book_id", bookId)
+        .order("created_at", { ascending: false }),
+      estimateNode(bookId, "adapt").catch(() => null),
+    ]);
+
+    return NextResponse.json({
+      ...script,
+      review,
+      chapters: chaptersRes.data ?? [],
+      adaptedList: adaptedRes.data ?? [],
+      adaptBlockers: adaptEstimate?.blockers ?? [],
+    });
   } catch (err) {
     const message = (err as { message?: string })?.message ?? (err instanceof Error ? err.message : String(err));
     return NextResponse.json({ error: message }, { status: 500 });

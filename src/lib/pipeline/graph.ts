@@ -10,9 +10,13 @@ export const NODE_GRAPH = {
     produces: ["chapter_summaries", "characters", "locations", "clues", "style_bibles"],
     consumes: ["source_chapters"],
   },
+  condense: {
+    produces: ["condensed_chapters"],
+    consumes: ["style_bibles", "clues", "source_chapters"],
+  },
   adapt: {
     produces: ["adapted_chapters", "beats"],
-    consumes: ["style_bibles", "clues", "source_chapters"],
+    consumes: ["style_bibles", "clues", "source_chapters", "condensed_chapters"],
   },
   "assets-phase1": { produces: ["assets", "asset_requests"], consumes: ["characters", "locations"] },
   "assets-phase2": { produces: ["assets", "asset_requests"], consumes: ["assets"] },
@@ -43,6 +47,7 @@ export interface NodeEstimate {
 /** 风险闸门（docs/07 I3）：按“对世界做了什么”分级，不看模型置信度 */
 export const NODE_GATE: Record<GraphNode, "auto" | "notify" | "block"> = {
   analyze: "notify",
+  condense: "notify",
   adapt: "block",
   "assets-phase1": "notify",
   "assets-phase2": "notify",
@@ -74,6 +79,15 @@ export async function estimateNode(bookId: string, node: GraphNode): Promise<Nod
       // 实测校准（docs/06 附录 F）：2674 字章节 17~21s
       base.estSeconds = [15, 30];
       if (!ch) base.blockers.push("还没有上传章节");
+      return base;
+    }
+    case "condense": {
+      const { data: ch } = await s.from("source_chapters").select("char_count").eq("book_id", bookId).eq("idx", 1).single();
+      base.llmCalls = 1;
+      base.estSeconds = [20, 90];
+      if (!ch) base.blockers.push("还没有上传章节");
+      const { data: existing } = await s.from("condensed_chapters").select("id").eq("book_id", bookId).limit(1).maybeSingle();
+      if (existing) base.overwrites.push({ table: "condensed_chapters", count: 1 });
       return base;
     }
     case "adapt": {
@@ -108,17 +122,36 @@ export async function estimateNode(bookId: string, node: GraphNode): Promise<Nod
       const { data: shots } = await s.from("shots").select("id").eq("book_id", bookId);
       base.estSeconds = [2, 6];
       base.overwrites.push({ table: "shots", count: shots?.length ?? 0 });
-      const { data: adapted } = await s.from("adapted_chapters").select("id").eq("book_id", bookId).limit(1).maybeSingle();
+      const [{ data: adapted }, { data: background }] = await Promise.all([
+        s.from("adapted_chapters").select("id, status").eq("book_id", bookId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+        s.from("assets").select("id").eq("book_id", bookId).eq("kind", "background").eq("status", "approved").limit(1).maybeSingle(),
+      ]);
       if (!adapted) base.blockers.push("还没有改编脚本（签核 B）");
+      else if (adapted.status !== "approved") base.blockers.push("改编脚本尚未批准（签核 B）");
+      if (!background) base.blockers.push("还没有已批准的背景图（签核 C）");
       return base;
     }
     case "voice": {
-      const { data: beats } = await s.from("beats").select("id").eq("book_id", bookId);
+      const [{ data: adapted }, { data: beats }] = await Promise.all([
+        s.from("adapted_chapters").select("id, status").eq("book_id", bookId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+        s.from("beats").select("id").eq("book_id", bookId),
+      ]);
       const n = beats?.length ?? 0;
       base.ttsCalls = n;
       // 实测校准：32 句 29s（串行 TTS+ASR，单句 <1s）
       base.estSeconds = [Math.max(15, n * 1), Math.max(40, n * 2)];
+      if (!adapted) base.blockers.push("还没有改编脚本（签核 B）");
+      else if (adapted.status !== "approved") base.blockers.push("改编脚本尚未批准（签核 B）");
       if (n === 0) base.blockers.push("还没有 beats");
+      return base;
+    }
+    case "render": {
+      const [{ data: timeline }, { data: takes }] = await Promise.all([
+        s.from("timelines").select("id").eq("book_id", bookId).eq("status", "approved").limit(1).maybeSingle(),
+        s.from("voice_takes").select("id").eq("book_id", bookId).eq("status", "accepted").limit(1).maybeSingle(),
+      ]);
+      if (!timeline) base.blockers.push("还没有已批准的分镜（签核 D）");
+      if (!takes) base.blockers.push("还没有已批准的配音（签核 E）");
       return base;
     }
     default:

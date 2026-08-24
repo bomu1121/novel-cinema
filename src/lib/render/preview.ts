@@ -125,7 +125,7 @@ export async function renderShotPreview(
       "-an",
       outPath,
     ],
-    { stdio: "ignore", windowsHide: false },
+    { stdio: "ignore", windowsHide: true },
   );
 
   if (result.status !== 0) {

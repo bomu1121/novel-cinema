@@ -533,7 +533,7 @@ function StoryboardCanvas() {
 
       <div className="flex min-h-0 flex-1">
       {/* 左侧资产池 */}
-      <aside className="flex w-56 shrink-0 flex-col gap-2 overflow-y-auto border-r border-border-strong bg-surface p-3">
+      <aside className="scroll-hover-reveal scroll-contain flex w-56 shrink-0 flex-col gap-2 overflow-y-auto border-r border-border-strong bg-surface p-3">
         <h2 className="text-sm font-bold">角色资产池（拖图上镜头）</h2>
         <p className="text-xs text-text-muted">按角色分组；点「换图」或直接拖到镜头。快捷键 B/S 选对象 · R 重跑分镜。</p>
 
@@ -675,7 +675,7 @@ function StoryboardCanvas() {
       </div>
 
       {/* 右侧检查器 */}
-      <aside className="flex w-80 shrink-0 flex-col gap-3 overflow-y-auto border-l border-border-strong bg-surface p-4 text-xs">
+      <aside className="scroll-hover-reveal scroll-contain flex w-80 shrink-0 flex-col gap-3 overflow-y-auto border-l border-border-strong bg-surface p-4 text-xs">
         <h2 className="text-sm font-bold">检查器</h2>
         {!selectedShot && !selectedBeat && (
           <p className="text-text-subtle">点击上方 beat 卡片改说话人/台词；点击镜头卡片改画面。</p>

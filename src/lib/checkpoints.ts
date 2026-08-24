@@ -37,7 +37,7 @@ export interface CheckpointInfo {
 
 /** 允许被快照/恢复的表白名单（与 EDITABLE_TABLES + 破坏性节点产物对齐） */
 const SNAPSHOT_TABLES = new Set([
-  "source_chapters", "characters", "character_relations", "clues", "locations",
+  "source_chapters", "condensed_chapters", "characters", "character_relations", "clues", "locations",
   "style_bibles", "adapted_chapters", "beats", "shots", "shot_layers",
   "voice_profiles", "voice_takes", "assets", "timelines", "review_tasks",
 ]);

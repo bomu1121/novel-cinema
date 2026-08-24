@@ -104,6 +104,45 @@ export default function UIStyleGuidePage() {
         <h2 className="font-display text-title font-semibold">空态</h2>
         <EmptyState title="还没有分镜" description="前置条件：改编脚本 → 资产生成（背景）→ 点“构建分镜”。" />
       </section>
+
+      <section className="space-y-4">
+        <h2 className="font-display text-title font-semibold">滚动条（docs/12）</h2>
+        <p className="text-caption text-text-muted">
+          细、圆、低对比、轨道透明；内容区静息可见，chrome 区（导航/面板）悬停浮现。
+        </p>
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div>
+            <p className="mb-1 text-caption text-text-muted">内容区（静息可见）</p>
+            <div className="h-40 overflow-y-auto rounded-lg border border-border bg-surface p-3 text-caption leading-5">
+              {Array.from({ length: 14 }, (_, i) => (
+                <p key={i} className="mb-2 text-text-muted">
+                  内容区滚动条 · 静息 22% 透明度，悬停加深 · 第 {i + 1} 行
+                </p>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="mb-1 text-caption text-text-muted">chrome 区（scroll-hover-reveal）</p>
+            <div className="scroll-hover-reveal scroll-contain h-40 overflow-y-auto rounded-lg border border-border bg-surface p-3 text-caption leading-5">
+              {Array.from({ length: 14 }, (_, i) => (
+                <p key={i} className="mb-2 text-text-muted">
+                  导航/面板 · 空闲透明，悬停或聚焦时浮现 · 第 {i + 1} 行
+                </p>
+              ))}
+            </div>
+          </div>
+          <div data-theme="dark" className="rounded-lg bg-surface-0 p-3">
+            <p className="mb-1 text-caption text-text-muted">暗色画布（data-theme=&quot;dark&quot;）</p>
+            <div className="h-40 overflow-y-auto rounded-lg border border-border bg-surface p-3 text-caption leading-5">
+              {Array.from({ length: 14 }, (_, i) => (
+                <p key={i} className="mb-2 text-text-muted">
+                  画布面板 · 暗色令牌同阶透明度 · 第 {i + 1} 行
+                </p>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
     </PageShell>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useToast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
@@ -45,11 +45,14 @@ interface WorkbenchData {
   timeline?: any;
   renderJobs?: any[];
   estimates?: Record<string, string>;
+  nodeBlockers?: Record<string, string[]>;
 }
 
 export default function WorkbenchPage() {
   const params = useParams<{ bookId: string }>();
   const bookId = params.bookId;
+  const searchParams = useSearchParams();
+  const queryChapterId = searchParams.get("chapter");
 
   const [data, setData] = useState<WorkbenchData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +65,7 @@ export default function WorkbenchPage() {
   // 记录最近一次重跑的节点（staging 节点完成后进入审阅而非直接刷新）
   const [rerunNodeName, setRerunNodeName] = useState<string | null>(null);
   const isStagedNode = rerunNodeName === "adapt" || rerunNodeName === "storyboard";
+  const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   /** per-node 自主性预设（docs/07 I2 / P4-D）：direct 直接入队、notify 入队后通知、review 先预演 */
   const [autonomy, setAutonomy] = useState<Record<string, "direct" | "notify" | "review">>({
@@ -106,11 +110,17 @@ export default function WorkbenchPage() {
         return;
       }
       setData(json);
+      const firstChapterId = json.chapters?.[0]?.id ?? null;
+      const preferred =
+        queryChapterId && json.chapters?.some((c: { id: string }) => c.id === queryChapterId)
+          ? queryChapterId
+          : firstChapterId;
+      setSelectedChapterId(preferred);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [bookId]);
+  }, [bookId, queryChapterId]);
 
   useEffect(() => {
     // 挂载后拉取编排台；setState 均在异步回调内
@@ -212,10 +222,13 @@ export default function WorkbenchPage() {
   const executeRerun = useCallback(async (node: string) => {
     setError(null);
     try {
+      const input = ["analyze", "condense", "adapt"].includes(node) && selectedChapterId
+        ? { chapterId: selectedChapterId }
+        : undefined;
       const res = await fetch(`/api/books/${bookId}/jobs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ node }),
+        body: JSON.stringify({ node, input }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -227,7 +240,7 @@ export default function WorkbenchPage() {
     } catch (err) {
       toast.push("error", err instanceof Error ? err.message : String(err));
     }
-  }, [bookId, toast]);
+  }, [bookId, toast, selectedChapterId]);
 
   const rerun = useCallback(
     (node: string, label: string) => {
@@ -309,6 +322,9 @@ export default function WorkbenchPage() {
 
       {/* 重跑按钮 */}
       <SectionCard title="节点重跑（确认后覆盖该节点及下游）">
+        <p className="mb-3 text-xs text-text-muted">
+          分析 / 精简 / 改编会作用于左侧“当前章节”选择器中的章节。
+        </p>
         <div className="flex flex-wrap gap-2">
           {(
             [
@@ -319,34 +335,38 @@ export default function WorkbenchPage() {
               ["storyboard", "④ 分镜"],
               ["voice", "⑤ 配音"],
             ] as const
-          ).map(([node, label]) => (
-            <div key={node} className="flex items-center gap-1">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => rerun(node, label)}
-                disabled={busy !== null}
-                loading={busy === `rerun:${node}`}
-              >
-                {label}
-              </Button>
-              <Select
-                aria-label={`${label} 自主性`}
-                value={autonomy[node] ?? "review"}
-                onChange={(e) =>
-                  setAutonomy((prev) => ({
-                    ...prev,
-                    [node]: e.target.value as "direct" | "notify" | "review",
-                  }))
-                }
-                className="max-w-28"
-              >
-                <option value="direct">直接</option>
-                <option value="notify">通知</option>
-                <option value="review">预演</option>
-              </Select>
-            </div>
-          ))}
+          ).map(([node, label]) => {
+            const blockers = data?.nodeBlockers?.[node] ?? [];
+            return (
+              <div key={node} className="flex items-center gap-1">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => rerun(node, label)}
+                  disabled={busy !== null || blockers.length > 0}
+                  loading={busy === `rerun:${node}`}
+                  title={blockers.length > 0 ? blockers.join("；") : undefined}
+                >
+                  {label}
+                </Button>
+                <Select
+                  aria-label={`${label} 自主性`}
+                  value={autonomy[node] ?? "review"}
+                  onChange={(e) =>
+                    setAutonomy((prev) => ({
+                      ...prev,
+                      [node]: e.target.value as "direct" | "notify" | "review",
+                    }))
+                  }
+                  className="max-w-28"
+                >
+                  <option value="direct">直接</option>
+                  <option value="notify">通知</option>
+                  <option value="review">预演</option>
+                </Select>
+              </div>
+            );
+          })}
         </div>
 
           {confirming && (

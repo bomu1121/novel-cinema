@@ -42,6 +42,7 @@ export interface AdaptRunResult {
     targetSec: number;
     characterNames: string[];
     clueNames: string[];
+    basis: "source" | "condensed";
   };
   /** dryRun 时提供（staging 需要用它生成完整 beat 行） */
   characterIdByName?: Map<string, string>;
@@ -146,9 +147,30 @@ interface LoadedContext {
   clueIdByName: Map<string, string>;
 }
 
+/**
+ * 改编输入源：优先使用已批准的《精简底稿》，
+ * 没有批准的精简稿时退回原文章节。source_span 始终相对于实际输入文本。
+ */
+async function resolveAdaptationSource(
+  bookId: string,
+  chapter: SourceChapterForAdapt,
+): Promise<{ chapterText: string; basis: "source" | "condensed" }> {
+  const supabase = getSupabaseAdmin();
+  const { data: condensed } = await supabase
+    .from("condensed_chapters")
+    .select("condensed_text, status")
+    .eq("source_chapter_id", chapter.id)
+    .maybeSingle();
+  if (condensed?.status === "approved" && condensed.condensed_text) {
+    return { chapterText: condensed.condensed_text, basis: "condensed" };
+  }
+  return { chapterText: chapter.cleanedText, basis: "source" };
+}
+
 async function loadAdaptContext(
   bookId: string,
   chapter: SourceChapterForAdapt,
+  basis: "source" | "condensed",
 ): Promise<LoadedContext> {
   const supabase = getSupabaseAdmin();
 
@@ -166,6 +188,7 @@ async function loadAdaptContext(
       .from("style_bibles")
       .select("visual_style, narration_tone, camera_grammar, spoiler_rules, negative_prompt, status")
       .eq("book_id", bookId)
+      .eq("status", "approved")
       .order("version", { ascending: false })
       .limit(1)
       .maybeSingle(),
@@ -230,6 +253,7 @@ async function loadAdaptContext(
     chapterIdx: chapter.idx,
     chapterTitle: chapter.title,
     chapterText: chapter.cleanedText,
+    basis,
     targetSec: targetDurationForChapter(chapter.cleanedText.replace(/\s/g, "").length),
     characters: characters.map((c) => ({
       name: c.canonical_name,
@@ -307,7 +331,12 @@ export async function runAdaptation(
 ): Promise<AdaptRunResult> {
   const r = reporter ?? NOOP_REPORTER;
   r.step("加载改编上下文（人物/线索/风格）", 1, 4);
-  const { input, characterIdByName, clueIdByName } = await loadAdaptContext(bookId, chapter);
+  const { chapterText, basis } = await resolveAdaptationSource(bookId, chapter);
+  const { input, characterIdByName, clueIdByName } = await loadAdaptContext(
+    bookId,
+    { ...chapter, cleanedText: chapterText },
+    basis,
+  );
   const system = buildAdaptSystem(input.targetSec);
 
   let adapt: AdaptedChapter | null = null;
@@ -409,6 +438,7 @@ export async function runAdaptation(
       characterIdByName,
       clueIdByName,
       input.targetSec,
+      basis,
     );
   } else {
     r.step("生成变更清单（未落库，等待审阅）", 4, 4);
@@ -422,6 +452,7 @@ export async function runAdaptation(
       targetSec: input.targetSec,
       characterNames: [...characterIdByName.keys()],
       clueNames: [...clueIdByName.keys()],
+      basis,
     },
     characterIdByName,
     clueIdByName,
@@ -436,6 +467,7 @@ export async function buildAdaptationWrite(
   characterIdByName: Map<string, string>,
   clueIdByName: Map<string, string>,
   targetSec: number,
+  basis: "source" | "condensed" = "source",
 ): Promise<{ payload: Record<string, unknown>; beatRows: Array<Record<string, unknown>>; existingChapterId: string | null }> {
   const supabase = getSupabaseAdmin();
   const { data: existing } = await supabase
@@ -452,6 +484,7 @@ export async function buildAdaptationWrite(
     hook: adapt.hook,
     status: "pending_review",
     model: "deepseek-chat",
+    basis,
     target_duration_sec: targetSec,
     estimated_duration_sec: adapt.beats.reduce((s, b) => s + b.estimated_duration_sec, 0),
     importance: 1.0,
@@ -488,10 +521,11 @@ async function persistAdaptation(
   characterIdByName: Map<string, string>,
   clueIdByName: Map<string, string>,
   targetSec: number,
+  basis: "source" | "condensed",
 ): Promise<string> {
   const supabase = getSupabaseAdmin();
   const { payload, beatRows, existingChapterId } = await buildAdaptationWrite(
-    bookId, sourceChapterId, adapt, characterIdByName, clueIdByName, targetSec,
+    bookId, sourceChapterId, adapt, characterIdByName, clueIdByName, targetSec, basis,
   );
 
   let adaptedChapterId: string;
@@ -555,15 +589,16 @@ export async function updateBeat(
 }
 
 /** 供审校台加载：最新一章的脚本 + beats + 自检留档 */
-export async function getLatestScript(bookId: string) {
+export async function getLatestScript(bookId: string, chapterId?: string) {
   const supabase = getSupabaseAdmin();
-  const { data: chapter } = await supabase
+  let query = supabase
     .from("adapted_chapters")
-    .select("id, title, hook, status, target_duration_sec, estimated_duration_sec, selection_report, model, reviewed_at")
+    .select("id, source_chapter_id, title, hook, status, basis, target_duration_sec, estimated_duration_sec, selection_report, model, reviewed_at")
     .eq("book_id", bookId)
     .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+  if (chapterId) query = query.eq("source_chapter_id", chapterId);
+  const { data: chapter } = await query.maybeSingle();
 
   if (!chapter) return { chapter: null, beats: [] };
 

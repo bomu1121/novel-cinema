@@ -31,7 +31,7 @@ export async function GET(
       await Promise.all([
         supabase
           .from("books")
-          .select("id, title, status, total_chars, created_at")
+          .select("id, title, status, total_chars, created_at, source_encoding, parse_report")
           .eq("id", bookId)
           .single(),
         supabase

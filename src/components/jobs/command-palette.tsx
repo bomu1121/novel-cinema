@@ -84,7 +84,7 @@ export function CommandPalette({ open, items, onClose }: CommandPaletteProps) {
           className="w-full border-b border-border bg-transparent px-4 py-3 text-sm outline-none"
           aria-label="命令查询"
         />
-        <ul className="max-h-80 overflow-y-auto py-1">
+        <ul className="scroll-contain max-h-80 overflow-y-auto py-1">
           {filtered.length === 0 && (
             <li className="px-4 py-3 text-sm text-text-subtle">没有匹配的命令</li>
           )}

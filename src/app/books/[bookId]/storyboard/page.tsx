@@ -45,6 +45,12 @@ interface StoryboardData {
     duration_sec: number | null;
     version: number;
   } | null;
+  chapter: {
+    id: string;
+    source_chapter_id: string;
+    title: string | null;
+    status: string;
+  } | null;
   tracks: Track[];
   backgrounds: Array<{ id: string; title: string | null; url: string | null }>;
 }
@@ -63,9 +69,11 @@ export default function StoryboardPage() {
 
   const [data, setData] = useState<StoryboardData>({
     timeline: null,
+    chapter: null,
     tracks: [],
     backgrounds: [],
   });
+  const [storyboardBlockers, setStoryboardBlockers] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"build" | "approve" | null>(null);
   const [durations, setDurations] = useState<Record<string, number>>({});
@@ -92,6 +100,7 @@ export default function StoryboardPage() {
         return;
       }
       setData(json);
+      setStoryboardBlockers(json.storyboardBlockers ?? []);
       const nextDurations: Record<string, number> = {};
       const nextBackgrounds: Record<string, string> = {};
       for (const t of json.tracks ?? []) {
@@ -167,7 +176,7 @@ export default function StoryboardPage() {
               bookId={bookId}
               node="storyboard"
               label="构建分镜"
-              disabled={busy !== null}
+              disabled={busy !== null || storyboardBlockers.length > 0}
               onRunningChange={(r) => setBusy(r ? "build" : null)}
               onDone={(jobId) => {
                 toast.push("info", "分镜已生成，进入逐条审阅（应用前不覆盖任何数据）", undefined);
@@ -202,6 +211,18 @@ export default function StoryboardPage() {
       )}
 
       <ErrorBanner message={error} />
+
+      {storyboardBlockers.length > 0 && (
+        <div className="rounded-lg border border-stale/40 bg-stale/10 px-4 py-3 text-sm text-stale" role="alert">
+          构建分镜暂不可用：{storyboardBlockers.join("；")}
+        </div>
+      )}
+
+      {data.chapter && (
+        <p className="text-sm text-text-muted">
+          当前分镜基于改编章节：<span className="font-medium text-text">{data.chapter.title ?? "未命名章节"}</span>
+        </p>
+      )}
 
       {data.timeline && (
         <p className="text-sm text-text-muted">

@@ -18,4 +18,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 长任务一律走 jobs 队列 + SSE，禁止在 route handler 里同步 await AI 节点（P1 起生效）。
 - 破坏性写操作前必须建 checkpoint（`@/lib/checkpoints`）；`estimate().reversible` 必须反映真实情况。
 - 新组件默认无障碍：≥24px 命中区、aria-live 播报、reduced-motion 兜底。
+- 滚动条走 `globals.css` 滚动条体系（docs/12）：同一滚动轴只允许一个滚动所有者，
+  禁止"页面滚动 + 内层固定高度滚动"职能重复；可滚动容器按需挂 `.scroll-hover-reveal`（chrome 区）/ `.scroll-contain`（嵌套容器）。
 - 改完 UI 跑 `npm run lint:ui`；组件改动跑 `npm run test:ui`。

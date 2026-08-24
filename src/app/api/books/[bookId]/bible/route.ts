@@ -9,9 +9,14 @@ export async function GET(
   try {
     const supabase = getSupabaseAdmin();
 
-    const [bookRes, chaptersRes, charactersRes, locationsRes, itemsRes, cluesRes, eventsRes, styleRes] =
+    const [bookRes, sourceChaptersRes, chaptersRes, charactersRes, locationsRes, itemsRes, cluesRes, eventsRes, styleRes] =
       await Promise.all([
         supabase.from("books").select("id, title, status").eq("id", bookId).single(),
+        supabase
+          .from("source_chapters")
+          .select("id, idx, title, char_count, status")
+          .eq("book_id", bookId)
+          .order("idx"),
         supabase
           .from("chapter_summaries")
           .select("source_chapter_id, summary, key_events, characters, clues, tone")
@@ -48,6 +53,7 @@ export async function GET(
 
     return NextResponse.json({
       book: bookRes.data,
+      chapters: sourceChaptersRes.data ?? [],
       summaries: chaptersRes.data ?? [],
       characters: charactersRes.data ?? [],
       locations: locationsRes.data ?? [],

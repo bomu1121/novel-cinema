@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { approveStyleBible } from "@/lib/pipeline/nodes/analyze";
 
-export async function POST(request: Request) {
+export async function POST(
+  request: Request,
+  ctx: RouteContext<"/api/books/[bookId]/bible/approve">,
+) {
+  const { bookId } = await ctx.params;
   try {
     const body = (await request.json()) as {
       styleBibleId: string;
@@ -14,9 +18,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const selected = await approveStyleBible(body.styleBibleId, body.proposalIndex);
+    const selected = await approveStyleBible(bookId, body.styleBibleId, body.proposalIndex);
     if (!selected) {
-      return NextResponse.json({ error: "方案不存在" }, { status: 404 });
+      return NextResponse.json({ error: "方案不存在或不属于本书" }, { status: 404 });
     }
 
     return NextResponse.json({ selected });
@@ -25,4 +29,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-

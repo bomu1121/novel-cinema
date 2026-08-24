@@ -209,14 +209,15 @@ export function applyStaged(
 export async function stageAdaptation(
   bookId: string,
   reporter?: ProgressReporter,
+  sourceChapterId?: string,
 ): Promise<{ entries: StageEntryInput[]; beats: number }> {
   const s = getSupabaseAdmin();
-  const { data: chapter } = await s
+  let chapterQuery = s
     .from("source_chapters")
     .select("id, idx, title, cleaned_text")
-    .eq("book_id", bookId)
-    .eq("idx", 1)
-    .single();
+    .eq("book_id", bookId);
+  chapterQuery = sourceChapterId ? chapterQuery.eq("id", sourceChapterId) : chapterQuery.eq("idx", 1);
+  const { data: chapter } = await chapterQuery.single();
   if (!chapter) throw new Error("没有 idx=1 的章节");
 
   let result: Awaited<ReturnType<typeof runAdaptation>>;
@@ -243,12 +244,13 @@ export async function stageAdaptation(
     result.characterIdByName ?? new Map(),
     result.clueIdByName ?? new Map(),
     result.context.targetSec,
+    result.context.basis ?? "source",
   );
 
   const entries: StageEntryInput[] = [];
 
   // 章节行：存在则 update，否则 insert（含占位 id）
-  const chapterId = existingChapterId ?? randomUUID();
+  const newChapterId = existingChapterId ?? randomUUID();
   if (existingChapterId) {
     const { data: existingRow } = await s.from("adapted_chapters").select("*").eq("id", existingChapterId).single();
     entries.push({
@@ -263,7 +265,7 @@ export async function stageAdaptation(
     entries.push({
       tableName: "adapted_chapters",
       op: "insert",
-      after: { id: chapterId, ...payload },
+      after: { id: newChapterId, ...payload },
       groupKey: "章节",
     });
   }
@@ -282,7 +284,7 @@ export async function stageAdaptation(
     entries.push({
       tableName: "beats",
       op: "insert",
-      after: { id, ...row, adapted_chapter_id: chapterId },
+      after: { id, ...row, adapted_chapter_id: newChapterId },
       groupKey: `beat#${(row as { idx?: number }).idx ?? "?"}`,
     });
   }

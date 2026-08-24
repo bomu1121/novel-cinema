@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/db";
 import { resolveAssetUrl } from "@/lib/pipeline/nodes/assets";
+import { estimateNode } from "@/lib/pipeline/graph";
 
 export async function GET(
   _request: Request,
@@ -18,6 +19,14 @@ export async function GET(
       .limit(1)
       .maybeSingle();
 
+    const { data: adaptedChapter } = await supabase
+      .from("adapted_chapters")
+      .select("id, source_chapter_id, title, status")
+      .eq("book_id", bookId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
     const { data: bgRows } = await supabase
       .from("assets")
       .select("id, title, file_key, params")
@@ -25,11 +34,14 @@ export async function GET(
       .eq("kind", "background")
       .eq("status", "approved");
 
-    const backgrounds = await Promise.all(
-      ((bgRows ?? []) as Array<{ id: string; title: string | null; file_key: string | null; params: unknown }>).map(
-        async (b) => ({ id: b.id, title: b.title, url: await resolveAssetUrl(b) }),
+    const [backgrounds, storyboardEstimate] = await Promise.all([
+      Promise.all(
+        ((bgRows ?? []) as Array<{ id: string; title: string | null; file_key: string | null; params: unknown }>).map(
+          async (b) => ({ id: b.id, title: b.title, url: await resolveAssetUrl(b) }),
+        ),
       ),
-    );
+      estimateNode(bookId, "storyboard").catch(() => null),
+    ]);
     const bgUrlById = new Map<string, string>();
     for (const bg of backgrounds) {
       if (bg.url) bgUrlById.set(bg.id, bg.url);
@@ -77,8 +89,10 @@ export async function GET(
 
     return NextResponse.json({
       timeline: timeline ?? null,
+      chapter: adaptedChapter ?? null,
       tracks,
       backgrounds,
+      storyboardBlockers: storyboardEstimate?.blockers ?? [],
     });
   } catch (err) {
     const message = (err as { message?: string })?.message ?? (err instanceof Error ? err.message : String(err));

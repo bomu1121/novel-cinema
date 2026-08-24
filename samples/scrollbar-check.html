@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>scrollbar system self-check</title>
+<style>
+  /* ==== 复刻 globals.css 滚动条体系（docs/12）==== */
+  :root {
+    --surface-0: #fafafa;
+    --surface-1: #ffffff;
+    --surface-2: #f4f4f5;
+    --edge: #e4e4e7;
+    --ink: #18181b;
+    --ink-muted: #5f5f66;
+    --scrollbar-size: 10px;
+    --scrollbar-thumb: rgb(24 24 27 / 0.22);
+    --scrollbar-thumb-hover: rgb(24 24 27 / 0.42);
+    --scrollbar-thumb-active: rgb(24 24 27 / 0.6);
+    --scrollbar-track: transparent;
+  }
+  [data-theme="dark"] {
+    --surface-0: #0c0c0e;
+    --surface-1: #18181b;
+    --edge: #27272a;
+    --ink: #f4f4f5;
+    --scrollbar-thumb: rgb(244 244 245 / 0.22);
+    --scrollbar-thumb-hover: rgb(244 244 245 / 0.4);
+    --scrollbar-thumb-active: rgb(244 244 245 / 0.55);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+  *::-webkit-scrollbar { width: var(--scrollbar-size); height: var(--scrollbar-size); }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-corner { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
+  *::-webkit-scrollbar-thumb:active { background-color: var(--scrollbar-thumb-active); }
+  [data-theme="dark"] *::-webkit-scrollbar-thumb { background-color: var(--scrollbar-thumb); }
+  [data-theme="dark"] *::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
+  [data-theme="dark"] *::-webkit-scrollbar-thumb:active { background-color: var(--scrollbar-thumb-active); }
+  .scroll-hover-reveal { scrollbar-color: transparent transparent; }
+  .scroll-hover-reveal:hover,
+  .scroll-hover-reveal:focus-within { scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); }
+  .scroll-hover-reveal::-webkit-scrollbar-thumb { background-color: transparent; }
+  .scroll-hover-reveal:hover::-webkit-scrollbar-thumb,
+  .scroll-hover-reveal:focus-within::-webkit-scrollbar-thumb { background-color: var(--scrollbar-thumb); }
+  .scroll-hover-reveal:hover::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
+  .scroll-hover-reveal:hover::-webkit-scrollbar-thumb:active { background-color: var(--scrollbar-thumb-active); }
+  .scroll-contain { overscroll-behavior: contain; }
+
+  /* ==== 演示布局 ==== */
+  body { margin: 0; font-family: system-ui, "Microsoft YaHei", sans-serif; display: grid; grid-template-columns: 1fr 1fr; }
+  section { padding: 20px; height: 100vh; box-sizing: border-box; }
+  .light { background: var(--surface-0); color: var(--ink); }
+  .dark { background: #0c0c0e; color: #f4f4f5; }
+  h1 { font-size: 14px; margin: 0 0 10px; opacity: 0.8; }
+  .panel {
+    height: 320px; overflow-y: auto; border: 1px solid var(--edge);
+    border-radius: 10px; padding: 12px; margin-bottom: 14px;
+  }
+  .reveal { background: #fff; }
+  .dark .reveal { background: #18181b; }
+  .box { height: 90px; margin-bottom: 8px; border-radius: 8px; background: #f4f4f5; }
+  .dark .box { background: #1f1f23; }
+  .caption { font-size: 12px; opacity: 0.6; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+  <section class="light">
+    <h1>浅色 · 内容区（静息可见 22% → hover 42%）</h1>
+    <div class="caption">普通可滚动面板：scrollbar-width: thin + scrollbar-color</div>
+    <div class="panel">
+      <div class="box"></div><div class="box"></div><div class="box"></div><div class="box"></div><div class="box"></div><div class="box"></div><div class="box"></div>
+    </div>
+    <div class="caption">chrome 区（导航/面板）：.scroll-hover-reveal —— 空闲透明，悬停浮现</div>
+    <div class="panel reveal scroll-hover-reveal">
+      <div class="box"></div><div class="box"></div><div class="box"></div><div class="box"></div><div class="box"></div><div class="box"></div><div class="box"></div>
+    </div>
+    <div class="caption">横向滚动条（同规则，10px 高圆条）</div>
+    <div style="height:80px; overflow-x:auto; border:1px solid var(--edge); border-radius:10px; white-space:nowrap; padding:10px;">
+      <span style="display:inline-block; width:2200px; height:40px; background:linear-gradient(90deg,#e4e4e7,#d4d4d8); border-radius:8px;"></span>
+    </div>
+  </section>
+  <section class="dark" data-theme="dark">
+    <h1>暗色画布 · 内容区（提亮同阶透明度）</h1>
+    <div class="caption">普通可滚动面板</div>
+    <div class="panel">
+      <div class="box"></div><div class="box"></div><div class="box"></div><div class="box"></div><div class="box"></div><div class="box"></div><div class="box"></div>
+    </div>
+    <div class="caption">chrome 区：.scroll-hover-reveal（暗色令牌）</div>
+    <div class="panel reveal scroll-hover-reveal">
+      <div class="box"></div><div class="box"></div><div class="box"></div><div class="box"></div><div class="box"></div><div class="box"></div><div class="box"></div>
+    </div>
+    <div class="caption">textarea 场景（控件自身滚动）</div>
+    <textarea style="width:100%; height:120px; resize:none; border:1px solid var(--edge); border-radius:10px; background:#1f1f23; color:#f4f4f5; padding:10px; box-sizing:border-box;" readonly>
+第二行
+第三行
+第四行
+第五行
+第六行
+第七行
+第八行
+第九行
+第十行
+第十一行
+第十二行
+第十三行
+第十四行
+第十五行
+第十六行
+第十七行
+第十八行
+第十九行
+第二十行
+第二十一行
+第二十二行
+    </textarea>
+  </section>
+</body>
+</html>

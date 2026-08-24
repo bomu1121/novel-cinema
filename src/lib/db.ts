@@ -29,7 +29,7 @@ const JSON_COLUMNS = new Set([
   "style", "snapshot", "publish_meta", "preset", "error", "input_ref",
   "output_ref", "cost", "ai_report", "human_decision", "input_snapshot",
   "aliases", "genre", "character_ids", "related_character_ids",
-  "related_item_ids", "clue_ids", "before_json",
+  "related_item_ids", "clue_ids", "before_json", "parse_report", "report",
 ]);
 
 function encodeRow(table: string, row: Record<string, any>): Record<string, any> {
@@ -348,6 +348,8 @@ CREATE TABLE IF NOT EXISTS books (
   total_chars INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'draft',
   settings TEXT NOT NULL DEFAULT '{}',
+  source_encoding TEXT,
+  parse_report TEXT NOT NULL DEFAULT '{}',
   created_at TEXT,
   updated_at TEXT
 );
@@ -365,6 +367,25 @@ CREATE TABLE IF NOT EXISTS source_chapters (
   created_at TEXT,
   updated_at TEXT,
   UNIQUE(book_id, idx)
+);
+
+CREATE TABLE IF NOT EXISTS condensed_chapters (
+  id TEXT PRIMARY KEY,
+  book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+  source_chapter_id TEXT NOT NULL UNIQUE REFERENCES source_chapters(id) ON DELETE CASCADE,
+  title TEXT,
+  hook TEXT,
+  condensed_text TEXT NOT NULL,
+  source_chars INTEGER NOT NULL DEFAULT 0,
+  target_chars INTEGER NOT NULL DEFAULT 0,
+  ratio REAL NOT NULL DEFAULT 0.35,
+  status TEXT NOT NULL DEFAULT 'draft',
+  model TEXT,
+  raw_output TEXT NOT NULL DEFAULT '{}',
+  report TEXT NOT NULL DEFAULT '{}',
+  hand_edited INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT,
+  updated_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS chapter_summaries (
@@ -573,6 +594,7 @@ CREATE TABLE IF NOT EXISTS adapted_chapters (
   status TEXT NOT NULL DEFAULT 'draft',
   model TEXT,
   model_version TEXT,
+  basis TEXT NOT NULL DEFAULT 'source',
   target_duration_sec REAL NOT NULL DEFAULT 0,
   estimated_duration_sec REAL NOT NULL DEFAULT 0,
   importance REAL NOT NULL DEFAULT 1.0,
@@ -807,6 +829,7 @@ CREATE TABLE IF NOT EXISTS staged_changes (
 CREATE INDEX IF NOT EXISTS idx_staged_book ON staged_changes(book_id, job_id, status);
 
 CREATE INDEX IF NOT EXISTS idx_source_chapters_book ON source_chapters(book_id);
+CREATE INDEX IF NOT EXISTS idx_condensed_chapters_book ON condensed_chapters(book_id);
 CREATE INDEX IF NOT EXISTS idx_characters_book ON characters(book_id);
 CREATE INDEX IF NOT EXISTS idx_assets_book_scene ON assets(book_id, scene_key);
 CREATE INDEX IF NOT EXISTS idx_beats_chapter ON beats(adapted_chapter_id, idx);
@@ -828,6 +851,15 @@ CREATE INDEX IF NOT EXISTS idx_checkpoints_book ON checkpoints(book_id, created_
   // 新列就位后再建索引（老库上必须在 ALTER 之后）
   db.exec(`CREATE INDEX IF NOT EXISTS idx_snapshots_checkpoint ON snapshots(checkpoint_id)`);
 
+  // books 增量列（上传解析升级：编码 + 清洗报告持久化）
+  const bookColumns = db.prepare(`PRAGMA table_info(books)`).all().map((r) => (r as { name: string }).name);
+  if (!bookColumns.includes("source_encoding")) {
+    db.exec(`ALTER TABLE books ADD COLUMN source_encoding TEXT`);
+  }
+  if (!bookColumns.includes("parse_report")) {
+    db.exec(`ALTER TABLE books ADD COLUMN parse_report TEXT NOT NULL DEFAULT '{}'`);
+  }
+
   // jobs 增量列（老库补列，P1 可观测执行）
   const jobColumns = db.prepare(`PRAGMA table_info(jobs)`).all().map((r) => (r as { name: string }).name);
   const jobAdds: Array<[string, string]> = [
@@ -842,6 +874,12 @@ CREATE INDEX IF NOT EXISTS idx_checkpoints_book ON checkpoints(book_id, created_
     if (!jobColumns.includes(col)) {
       db.exec(`ALTER TABLE jobs ADD COLUMN ${ddl}`);
     }
+  }
+
+  // adapted_chapters 增量列：改编输入来源（原文 / 精简底稿）
+  const adaptedColumns = db.prepare(`PRAGMA table_info(adapted_chapters)`).all().map((r) => (r as { name: string }).name);
+  if (!adaptedColumns.includes("basis")) {
+    db.exec(`ALTER TABLE adapted_chapters ADD COLUMN basis TEXT NOT NULL DEFAULT 'source'`);
   }
 }
 

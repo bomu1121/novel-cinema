@@ -12,14 +12,20 @@ import { useJob } from "@/lib/ui/use-job";
  */
 export interface JobRunnerProps {
   bookId: string;
-  node: "analyze" | "adapt" | "assets-phase1" | "assets-phase2" | "storyboard" | "voice";
+  node: "analyze" | "condense" | "adapt" | "assets-phase1" | "assets-phase2" | "storyboard" | "voice";
   label: string;
+  /** 入队时随任务一起传递的结构化输入（如 analyze 的 chapterId） */
+  input?: Record<string, unknown>;
   disabled?: boolean;
   variant?: "primary" | "secondary" | "ghost" | "danger" | "approve";
   size?: "sm" | "md";
   className?: string;
+  /** 已有任务 id（页面切换章节后重新挂载时接回进度） */
+  initialJobId?: string | null;
   /** 运行中状态回调（页面用它冻结其他按钮） */
   onRunningChange?: (running: boolean) => void;
+  /** 入队成功（页面可持久化 jobId，供切换章节后接回） */
+  onStart?: (jobId: string) => void;
   /** 成功完成（页面在此刷新数据） */
   onDone?: (jobId: string) => void;
   /** 失败/取消 */
@@ -30,15 +36,19 @@ export function JobRunner({
   bookId,
   node,
   label,
+  input,
   disabled,
   variant = "primary",
   size = "md",
   className = "",
+  initialJobId = null,
   onRunningChange,
+  onStart,
   onDone,
   onSettled,
 }: JobRunnerProps) {
-  const [jobId, setJobId] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(initialJobId);
+  const [startError, setStartError] = useState<string | null>(null);
   const job = useJob(bookId, jobId);
   const running = job.status === "pending" || job.status === "running";
   const doneRef = useRef(false);
@@ -59,19 +69,24 @@ export function JobRunner({
 
   const start = useCallback(async () => {
     doneRef.current = false;
+    setStartError(null);
     try {
       const res = await fetch(`/api/books/${bookId}/jobs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ node }),
+        body: JSON.stringify({ node, input }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "入队失败");
-      setJobId(json.jobId as string);
+      const nextJobId = json.jobId as string;
+      setJobId(nextJobId);
+      onStart?.(nextJobId);
     } catch (err) {
-      onSettled?.("failed", err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      setStartError(message);
+      onSettled?.("failed", message);
     }
-  }, [bookId, node, onSettled]);
+  }, [bookId, node, input, onStart, onSettled]);
 
   return (
     <div className={className}>
@@ -84,6 +99,11 @@ export function JobRunner({
       >
         {label}
       </Button>
+      {startError && (
+        <p className="mt-2 text-xs text-stale" role="alert">
+          {startError}
+        </p>
+      )}
       {jobId && (
         <JobStepList
           className="mt-2"

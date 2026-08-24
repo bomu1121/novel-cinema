@@ -62,6 +62,13 @@
   --shadow-pop: 0 8px 32px rgb(0 0 0 / 0.12), 0 2px 8px rgb(0 0 0 / 0.08);
   --hit-min: 24px;
   --hit-comfortable: 36px;
+
+  /* —— 滚动条（docs/12）：细、圆、低对比；透明度按 静息/悬停/拖拽 三档分层 —— */
+  --scrollbar-size: 10px;                          /* WebKit 兜底的视觉宽度（含 2px 呼吸边） */
+  --scrollbar-thumb: rgb(24 24 27 / 0.22);         /* 静息：隐约可见，不抢内容 */
+  --scrollbar-thumb-hover: rgb(24 24 27 / 0.42);   /* 悬停：可发现、可拖拽 */
+  --scrollbar-thumb-active: rgb(24 24 27 / 0.6);   /* 拖拽中 */
+  --scrollbar-track: transparent;                  /* 轨道永远透明，不画边框 */
 }
 
 /* 暗色画布（docs/08 §2.1 / §5.11）：只在 canvas 容器挂 data-theme="dark" */
@@ -90,6 +97,10 @@
   --clue: #fbbf24;
   --spoiler: #f87171;
   --character: #60a5fa;
+  /* 暗色画布下滚动条提亮同阶透明度，thumb 用浅色 ink */
+  --scrollbar-thumb: rgb(244 244 245 / 0.22);
+  --scrollbar-thumb-hover: rgb(244 244 245 / 0.4);
+  --scrollbar-thumb-active: rgb(244 244 245 / 0.55);
   /* surface-invert / inverse 保持常量：深底黑场与浅字在暗色下不变 */
 }
 
@@ -153,6 +164,104 @@ body {
   background: var(--surface-0);
   color: var(--ink);
   font-family: var(--font-sans);
+}
+
+/* ============================================================
+ * 滚动条体系（docs/12-scrollbar-design.md）
+ * 原则：细、圆、低对比、轨道透明；静息 → 悬停 → 拖拽三档透明度；
+ *       同一滚动轴只有一个滚动所有者（禁止页面与内层双重滚动）。
+ *
+ * 浏览器矩阵：
+ * - 标准属性 `scrollbar-width` / `scrollbar-color` 为基线
+ *   （Firefox 64+ / Chrome 121+ / Safari 18.2+）；
+ * - `::-webkit-scrollbar` 伪元素仅为旧版 Safari 兜底——
+ *   Chrome 中标准属性会覆盖伪元素样式，二者并存不会冲突。
+ * - 触屏（hover: none）跟随平台惯例直接隐藏滚动条。
+ * ============================================================ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* WebKit 旧版兜底：10px 视觉宽度 + 2px 透明呼吸边 → 6px 圆条 */
+*::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+*::-webkit-scrollbar-thumb:active {
+  background-color: var(--scrollbar-thumb-active);
+}
+
+/* 暗色画布（data-theme="dark"）：显式覆盖 WebKit 伪元素，
+ * 避免个别引擎对伪元素不继承自定义属性的兼容问题 */
+[data-theme="dark"] *::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+}
+[data-theme="dark"] *::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+[data-theme="dark"] *::-webkit-scrollbar-thumb:active {
+  background-color: var(--scrollbar-thumb-active);
+}
+
+/* 页面级：稳定留白。路由切换/内容增长时滚动条出现/消失不再引起整页横移 */
+html {
+  scrollbar-gutter: stable;
+}
+
+/* 触屏设备：触摸滚动是直接操纵，滚动条按平台惯例隐藏 */
+@media (hover: none) and (pointer: coarse) {
+  * {
+    scrollbar-width: none;
+  }
+  *::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* —— 工具类（组件里按需挂） —— */
+
+/* 悬停/聚焦时才浮现滚动条：用于导航栏、面板等"chrome"区域，
+ * 内容区（列表、日志、调色板）保持静息可见，保证可发现性 */
+.scroll-hover-reveal {
+  scrollbar-color: transparent transparent;
+}
+.scroll-hover-reveal:hover,
+.scroll-hover-reveal:focus-within {
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+.scroll-hover-reveal::-webkit-scrollbar-thumb {
+  background-color: transparent;
+}
+.scroll-hover-reveal:hover::-webkit-scrollbar-thumb,
+.scroll-hover-reveal:focus-within::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+}
+.scroll-hover-reveal:hover::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+.scroll-hover-reveal:hover::-webkit-scrollbar-thumb:active {
+  background-color: var(--scrollbar-thumb-active);
+}
+
+/* 嵌套滚动容器截断滚动链：内层滚到底/顶时不再把滚动传给外层页面 */
+.scroll-contain {
+  overscroll-behavior: contain;
 }
 
 /* 键盘可达性基线（docs/06 §5.5）；焦点环用交互强调色而非状态色（docs/07 V1） */

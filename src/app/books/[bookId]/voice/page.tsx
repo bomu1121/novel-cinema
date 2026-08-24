@@ -40,6 +40,7 @@ export default function VoicePage() {
   const bookId = params.bookId;
 
   const [data, setData] = useState<VoiceData>({ chapter: null, rows: [] });
+  const [voiceBlockers, setVoiceBlockers] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"generate" | "approve" | string | null>(null);
 
@@ -52,6 +53,7 @@ export default function VoicePage() {
         return;
       }
       setData(json);
+      setVoiceBlockers(json.voiceBlockers ?? []);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -109,7 +111,7 @@ export default function VoicePage() {
               bookId={bookId}
               node="voice"
               label={`逐句合成（缺 ${missing} 句）`}
-              disabled={busy !== null}
+              disabled={busy !== null || voiceBlockers.length > 0}
               onRunningChange={(r) => setBusy(r ? "generate" : null)}
               onDone={() => void load()}
             />
@@ -127,6 +129,18 @@ export default function VoicePage() {
       />
 
       <ErrorBanner message={error} onDismiss={() => setError(null)} />
+
+      {voiceBlockers.length > 0 && (
+        <div className="rounded-lg border border-stale/40 bg-stale/10 px-4 py-3 text-sm text-stale" role="alert">
+          配音暂不可用：{voiceBlockers.join("；")}
+        </div>
+      )}
+
+      {data.chapter && (
+        <p className="text-sm text-text-muted">
+          当前配音章节：<span className="font-medium text-text">{data.chapter.title}</span>
+        </p>
+      )}
 
       <div className="space-y-2">
         {data.rows.map((row) => (

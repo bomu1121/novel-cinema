@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
@@ -18,6 +18,7 @@ import { JobRunner } from "@/components/jobs/job-runner";
 import { StagedReviewPanel } from "@/components/jobs/staged-review-panel";
 import { PlanSheet } from "@/components/jobs/plan-sheet";
 import { useToast } from "@/components/toast";
+import { useJob } from "@/lib/ui/use-job";
 import { EMOTIONS } from "@/lib/ui/enums";
 
 interface BeatRow {
@@ -37,9 +38,25 @@ interface BeatRow {
 
 interface ChapterRow {
   id: string;
+  idx: number;
+  title: string | null;
+  char_count: number;
+  status: string;
+}
+
+interface AdaptedSummary {
+  id: string;
+  source_chapter_id: string;
+  title: string | null;
+  status: string;
+}
+
+interface ChapterRowData {
+  id: string;
   title: string;
   hook: string;
   status: string;
+  basis?: string | null;
   target_duration_sec: number;
   estimated_duration_sec: number;
   selection_report: {
@@ -51,7 +68,7 @@ interface ChapterRow {
 }
 
 interface ScriptData {
-  chapter: ChapterRow | null;
+  chapter: ChapterRowData | null;
   beats: BeatRow[];
 }
 
@@ -68,29 +85,44 @@ type BeatEdit = { text: string; emotion: string; pace: number; visual_note: stri
 export default function ScriptPage() {
   const params = useParams<{ bookId: string }>();
   const bookId = params.bookId;
+  const searchParams = useSearchParams();
+  const queryChapterId = searchParams.get("chapter");
   const toast = useToast();
 
   const [data, setData] = useState<ScriptData>({ chapter: null, beats: [] });
+  const [chapters, setChapters] = useState<ChapterRow[]>([]);
+  const [adaptedList, setAdaptedList] = useState<AdaptedSummary[]>([]);
+  const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
   const [review, setReview] = useState<ReviewItem[]>([]);
+  const [adaptBlockers, setAdaptBlockers] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [edits, setEdits] = useState<Record<string, BeatEdit>>({});
-  const [stagedJobId, setStagedJobId] = useState<string | null>(null);
+  // 每个章节独立记住最近一次 jobId：切换章节后仍能接回该章进度，互不锁定
+  const [jobIds, setJobIds] = useState<Record<string, string>>({});
+  // 可能有多个章节的 adapt 任务同时完成，逐个进入审阅
+  const [stagedJobIds, setStagedJobIds] = useState<string[]>([]);
   const [showPlan, setShowPlan] = useState(false);
+
+  const addStagedJobId = useCallback((jobId: string) => {
+    setStagedJobIds((prev) => (prev.includes(jobId) ? prev : [...prev, jobId]));
+  }, []);
 
   // 建议 chips → 预演卡 → 入队（docs/06 P3：预报→diff→撤销链路）
   async function startAdaptJob() {
+    if (!selectedChapterId) return;
     setShowPlan(false);
     setError(null);
     try {
       const res = await fetch(`/api/books/${bookId}/jobs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ node: "adapt" }),
+        body: JSON.stringify({ node: "adapt", input: { chapterId: selectedChapterId } }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "入队失败");
-      setStagedJobId(json.jobId as string);
+      const nextJobId = json.jobId as string;
+      setJobIds((prev) => ({ ...prev, [selectedChapterId]: nextJobId }));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -101,38 +133,62 @@ export default function ScriptPage() {
     fetch(`/api/books/${bookId}/staged`)
       .then((r) => r.json())
       .then((json) => {
-        const g = (json.groups ?? []).find((x: { node: string }) => x.node === "adapt");
-        if (g?.jobId) setStagedJobId(g.jobId);
+        const adaptGroups = (json.groups ?? []).filter(
+          (x: { node: string; jobId: string | null }) => x.node === "adapt" && x.jobId,
+        );
+        setStagedJobIds((prev) => {
+          const next = new Set(prev);
+          for (const g of adaptGroups) next.add(g.jobId as string);
+          return [...next];
+        });
       })
       .catch(() => undefined);
   }, [bookId]);
 
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/books/${bookId}/script`);
-      const json = await res.json();
-      if (json.error) {
-        setError(json.error);
-        return;
+  const load = useCallback(
+    async (chapterId?: string) => {
+      try {
+        const query = chapterId ? `?chapterId=${encodeURIComponent(chapterId)}` : "";
+        const res = await fetch(`/api/books/${bookId}/script${query}`);
+        const json = await res.json();
+        if (json.error) {
+          setError(json.error);
+          return;
+        }
+        setChapters(json.chapters ?? []);
+        setAdaptedList(json.adaptedList ?? []);
+        setData({ chapter: json.chapter ?? null, beats: json.beats ?? [] });
+        setReview(json.review ?? []);
+        setAdaptBlockers(json.adaptBlockers ?? []);
+        const next: Record<string, BeatEdit> = {};
+        for (const b of (json.beats ?? []) as BeatRow[]) {
+          next[b.id] = { text: b.text, emotion: b.emotion, pace: b.pace, visual_note: b.visual_note };
+        }
+        setEdits(next);
+        if (chapterId) {
+          setSelectedChapterId(chapterId);
+        } else {
+          const chaptersArr = (json.chapters ?? []) as ChapterRow[];
+          const firstId = chaptersArr[0]?.id ?? null;
+          const preferred =
+            queryChapterId && chaptersArr.some((c) => c.id === queryChapterId)
+              ? queryChapterId
+              : firstId;
+          setSelectedChapterId(preferred);
+        }
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
       }
-      setData(json);
-      setReview(json.review ?? []);
-      const next: Record<string, BeatEdit> = {};
-      for (const b of (json.beats ?? []) as BeatRow[]) {
-        next[b.id] = { text: b.text, emotion: b.emotion, pace: b.pace, visual_note: b.visual_note };
-      }
-      setEdits(next);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }, [bookId]);
+    },
+    [bookId, queryChapterId],
+  );
 
   useEffect(() => {
     // 挂载后拉取脚本；setState 均发生在异步回调内
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [load]);
+    void load(queryChapterId ?? undefined);
+  }, [load, queryChapterId]);
 
   async function saveBeat(beatId: string) {
     const edit = edits[beatId];
@@ -149,7 +205,7 @@ export default function ScriptPage() {
         setError(json.error ?? "保存失败");
         return;
       }
-      await load();
+      await load(selectedChapterId ?? undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -182,7 +238,7 @@ export default function ScriptPage() {
         setError(json.error ?? "批准失败");
         return;
       }
-      await load();
+      await load(selectedChapterId ?? undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -192,6 +248,14 @@ export default function ScriptPage() {
     setEdits((prev) => ({ ...prev, [beatId]: { ...prev[beatId], ...patch } }));
   }
 
+  const selectedChapter = chapters.find((c) => c.id === selectedChapterId) ?? null;
+  const selectedAdapted = selectedChapter
+    ? adaptedList.find((a) => a.source_chapter_id === selectedChapter.id) ?? null
+    : null;
+  const selectedChapterLabel = selectedChapter
+    ? `第 ${selectedChapter.idx} 章${selectedChapter.title ? ` · ${selectedChapter.title}` : ""}`
+    : "尚未选择章节";
+
   return (
     <PageShell className="space-y-6">
       <PageHeader
@@ -199,45 +263,124 @@ export default function ScriptPage() {
         meta="签核点 B"
         backHref={`/books/${bookId}`}
         backLabel="← 返回章节"
-        actions={
-          <div className="flex gap-2">
-            <JobRunner
-              bookId={bookId}
-              node="adapt"
-              label="运行章节改编"
-              onDone={(jobId) => {
-                toast.push("info", "改编完成，进入逐条审阅（应用前不覆盖任何数据）", undefined);
-                setStagedJobId(jobId);
-              }}
-            />
-            {data.chapter && data.chapter.status !== "approved" && (
-              <Button variant="approve" onClick={approveChapter}>
-                批准本章
-              </Button>
-            )}
-          </div>
-        }
       />
 
-      {stagedJobId && (
-        <StagedReviewPanel
+      {Object.values(jobIds).map((jobId) => (
+        <StagedJobBridge
+          key={jobId}
           bookId={bookId}
-          jobId={stagedJobId}
+          jobId={jobId}
+          onSucceeded={addStagedJobId}
+        />
+      ))}
+
+      {stagedJobIds.map((jobId) => (
+        <StagedReviewPanel
+          key={jobId}
+          bookId={bookId}
+          jobId={jobId}
           nodeLabel="改编脚本审阅"
           onApplied={(result) => {
             toast.push("success", `已应用 ${result.applied} 处变更（驳回 ${result.rejected}）`, undefined);
-            setStagedJobId(null);
-            void load();
+            setStagedJobIds((prev) => prev.filter((id) => id !== jobId));
+            setJobIds((prev) => {
+              const next = { ...prev };
+              for (const [chapterId, id] of Object.entries(next)) {
+                if (id === jobId) delete next[chapterId];
+              }
+              return next;
+            });
+            void load(selectedChapterId ?? undefined);
           }}
           onDiscarded={() => {
             toast.push("info", "已放弃本次改编，数据未改动", undefined);
-            setStagedJobId(null);
-            void load();
+            setStagedJobIds((prev) => prev.filter((id) => id !== jobId));
+            setJobIds((prev) => {
+              const next = { ...prev };
+              for (const [chapterId, id] of Object.entries(next)) {
+                if (id === jobId) delete next[chapterId];
+              }
+              return next;
+            });
+            void load(selectedChapterId ?? undefined);
           }}
         />
-      )}
+      ))}
 
       <ErrorBanner message={error} />
+
+      {chapters.length > 0 && (
+        <section className="space-y-4">
+          <div>
+            <h2 className="font-semibold">章节改编</h2>
+            <p className="mt-1 text-sm text-text-muted">
+              这里按“单章”执行改编：选择一章，生成该章的 beats 脚本并进入逐条审阅。不同章节可并行发起，互不锁定；下方脚本内容会随章节切换。
+            </p>
+          </div>
+
+          <Card className={selectedAdapted ? "" : "border-dashed"}>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h3 className="font-semibold">当前改编对象</h3>
+                <p className="mt-1 text-sm text-text-muted">
+                  {selectedChapter ? (
+                    <>
+                      <span className="font-medium text-text">{selectedChapterLabel}</span>
+                      （{selectedChapter.char_count.toLocaleString()} 字）
+                    </>
+                  ) : (
+                    "请选择章节"
+                  )}
+                </p>
+              </div>
+              {selectedAdapted && (
+                <span className="rounded-full bg-approved/10 px-2.5 py-1 text-caption text-approved">
+                  ✓ 已改编
+                </span>
+              )}
+            </div>
+
+            <p className="mt-2 text-sm text-text-muted">
+              {selectedAdapted
+                ? "已生成改编脚本，可在下方审阅、修改并批准。"
+                : selectedChapter
+                  ? "本章尚未改编，点击下方按钮生成脚本并进入审阅。"
+                  : "请先在列表中选择一章。"}
+            </p>
+
+            {selectedChapter && (
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <JobRunner
+                  key={selectedChapter.id}
+                  bookId={bookId}
+                  node="adapt"
+                  label={selectedAdapted ? `重新改编「${selectedChapterLabel}」` : `改编「${selectedChapterLabel}」`}
+                  input={{ chapterId: selectedChapter.id }}
+                  initialJobId={jobIds[selectedChapter.id] ?? null}
+                  disabled={adaptBlockers.length > 0}
+                  onStart={(jobId) =>
+                    setJobIds((prev) => ({ ...prev, [selectedChapter.id]: jobId }))
+                  }
+                  onDone={(jobId) => {
+                    toast.push("info", "改编完成，进入逐条审阅（应用前不覆盖任何数据）", undefined);
+                    addStagedJobId(jobId);
+                  }}
+                />
+                {adaptBlockers.length > 0 && (
+                  <span className="text-xs text-stale" role="alert">
+                    前置未满足：{adaptBlockers.join("；")}
+                  </span>
+                )}
+                {data.chapter && data.chapter.status !== "approved" && (
+                  <Button variant="approve" onClick={approveChapter}>
+                    批准本章
+                  </Button>
+                )}
+              </div>
+            )}
+          </Card>
+        </section>
+      )}
 
       {data.chapter && (
         <Card className="text-sm">
@@ -245,6 +388,9 @@ export default function ScriptPage() {
             <h2 className="font-semibold">{data.chapter.title}</h2>
             <span className="flex items-center gap-1.5 text-xs text-text-muted">
               {data.chapter.estimated_duration_sec.toFixed(0)}s / 预算 {data.chapter.target_duration_sec}s
+              <span className="rounded bg-surface-2 px-1.5 py-0.5">
+                {data.chapter.basis === "condensed" ? "输入：精简底稿" : "输入：原文"}
+              </span>
               <StatusPill table="adapted_chapters" status={data.chapter.status} />
               <ImpactPill bookId={bookId} table="adapted_chapters" rowId={data.chapter.id} status={data.chapter.status} />
             </span>
@@ -282,7 +428,7 @@ export default function ScriptPage() {
               className="mt-3"
               bookId={bookId}
               node="adapt"
-              busy={stagedJobId !== null}
+              busy={false}
               onExecute={() => void startAdaptJob()}
               onCancel={() => setShowPlan(false)}
             />
@@ -318,7 +464,7 @@ export default function ScriptPage() {
 
       <section className="space-y-3">
         {data.beats.length === 0 && (
-          <EmptyState description="还没有脚本。先在“全书档案”页跑一次分析（人物/线索/风格），再回来点“运行章节改编”。" />
+          <EmptyState description="还没有脚本。先在“章节改编”区选择一章并运行改编。" />
         )}
         {data.beats.map((beat) => {
           const edit = edits[beat.id];
@@ -401,7 +547,8 @@ export default function ScriptPage() {
                 </label>
               </div>
               <p className="mt-2 truncate text-xs text-text-subtle" title={beat.source_span.quote}>
-                原文出处：{beat.source_span.start_char}–{beat.source_span.end_char} “{beat.source_span.quote}”
+                {data.chapter?.basis === "condensed" ? "精简底稿出处" : "原文出处"}：
+                {beat.source_span.start_char}–{beat.source_span.end_char} “{beat.source_span.quote}”
               </p>
             </Card>
           );
@@ -420,4 +567,21 @@ export default function ScriptPage() {
       />
     </PageShell>
   );
+}
+
+/** 后台监听某个 adapt job：成功后把 jobId 送入待审列表（支持跨章节并行完成） */
+function StagedJobBridge({
+  bookId,
+  jobId,
+  onSucceeded,
+}: {
+  bookId: string;
+  jobId: string;
+  onSucceeded: (jobId: string) => void;
+}) {
+  const job = useJob(bookId, jobId);
+  useEffect(() => {
+    if (job.status === "succeeded") onSucceeded(jobId);
+  }, [job.status, jobId, onSucceeded]);
+  return null;
 }

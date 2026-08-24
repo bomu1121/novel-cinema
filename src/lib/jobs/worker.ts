@@ -64,15 +64,23 @@ export async function executeJob(jobId: string, run: (reporter: ProgressReporter
   }
 }
 
-/** 派生独立 worker 子进程执行 job。shell:true 是 Windows 解析 npx.cmd 所必需 */
+/**
+ * 派生独立 worker 子进程执行 job。
+ * 不用 `npx ...` + shell:true：Windows 上 detached + cmd.exe 会弹出命令行窗口；
+ * 直接用 node --import tsx 启动，既避免 .cmd 解析问题，也不会弹窗。
+ */
 export function spawnWorker(jobId: string): void {
-  const child = spawn("npx tsx src/lib/jobs/worker.ts --job " + jobId, {
-    cwd: process.cwd(),
-    detached: true,
-    stdio: "ignore",
-    windowsHide: false,
-    shell: true,
-  });
+  const child = spawn(
+    process.execPath,
+    ["--import", "tsx", "src/lib/jobs/worker.ts", "--job", jobId],
+    {
+      cwd: process.cwd(),
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+      shell: false,
+    },
+  );
   child.on("error", (err) => {
     console.error("[jobs] worker 启动失败:", err.message);
   });
@@ -99,7 +107,7 @@ async function main(): Promise<void> {
       // staging 模式：计算 → 变更清单（不落库），审阅后 apply
       const staged =
         job.node === "adapt"
-          ? await stageAdaptation(job.bookId, reporter)
+          ? await stageAdaptation(job.bookId, reporter, input.chapterId)
           : await stageStoryboard(job.bookId, reporter);
       stageEntries(job.bookId, jobId, job.node, staged.entries);
       appendEvent(jobId, "log", { line: `变更清单已生成（${staged.entries.length} 条），等待审阅；应用前不会覆盖任何数据` });

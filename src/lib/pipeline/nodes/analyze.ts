@@ -248,6 +248,17 @@ export async function persistStyleProposals(
   };
 
   if (existing) {
+    // 重新生成会覆盖已批准的方案：先建 checkpoint，失败/不满意可整体回滚
+    const { data: before } = await supabase
+      .from("style_bibles")
+      .select("*")
+      .eq("id", existing.id)
+      .single();
+    if (before) {
+      createCheckpoint(bookId, `重新生成风格方案（v${(existing.version ?? 0) + 1}）`, "node-rerun", "analyze", [
+        { table: "style_bibles", rowId: existing.id, before, op: "update" },
+      ]);
+    }
     await supabase
       .from("style_bibles")
       .update({ ...payload, version: (existing.version ?? 0) + 1 })
@@ -264,8 +275,9 @@ export async function persistStyleProposals(
   return created.id;
 }
 
-/** 签核 A：选定某一套风格方案（批准前自动建 checkpoint，docs/06 P2 验收④） */
+/** 签核 A：选定某一套风格方案（批准前自动建 checkpoint，批准后向下游传播 stale） */
 export async function approveStyleBible(
+  bookId: string,
   styleBibleId: string,
   proposalIndex: number,
 ): Promise<StyleBibleProposal | null> {
@@ -276,6 +288,7 @@ export async function approveStyleBible(
     .eq("id", styleBibleId)
     .single();
   if (!row) return null;
+  if (row.book_id !== bookId) return null;
 
   const proposals = (row.proposal_json ?? []) as StyleBibleProposal[];
   const selected = proposals[proposalIndex];
@@ -283,7 +296,7 @@ export async function approveStyleBible(
 
   // 批准即签核点：回滚可回到"批准风格方案之前"
   createCheckpoint(
-    row.book_id,
+    bookId,
     `批准风格方案「${selected.visual_style ?? `方案 ${proposalIndex + 1}`}」`,
     "approve",
     "approve:bible",
@@ -306,6 +319,10 @@ export async function approveStyleBible(
       negative_prompt: { text: selected.negative_prompt },
     })
     .eq("id", styleBibleId);
+
+  // 风格变更 → 下游脚本与精简底稿全部过期，等待显式重跑（不自动烧钱）
+  await supabase.from("adapted_chapters").update({ status: "stale" }).eq("book_id", bookId);
+  await supabase.from("condensed_chapters").update({ status: "stale" }).eq("book_id", bookId);
 
   return selected;
 }

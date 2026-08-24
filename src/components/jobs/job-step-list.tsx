@@ -94,7 +94,7 @@ export function JobStepList({ state, onCancel, className = "", stallMs = 30000 }
           {state.logs.length > 0 && (
             <details className="text-caption text-text-subtle">
               <summary className="cursor-pointer select-none">执行日志（{state.logs.length}）</summary>
-              <ul className="mt-1 max-h-32 space-y-0.5 overflow-y-auto rounded bg-surface-1 p-2">
+              <ul className="scroll-contain mt-1 max-h-32 space-y-0.5 overflow-y-auto rounded bg-surface-1 p-2">
                 {state.logs.map((line, i) => (
                   <li key={i} className="truncate font-mono text-[10px] leading-4">
                     {line}

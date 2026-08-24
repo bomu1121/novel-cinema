@@ -16,6 +16,8 @@
 - [docs/07-ui-visual-interaction-research.md](docs/07-ui-visual-interaction-research.md) — **UI 视觉与交互调研**（主流 AI coding 工具的视觉语言与交互规则 + 本项目差距与 P4 建议）
 - [docs/08-ui-visual-interaction-refactor.md](docs/08-ui-visual-interaction-refactor.md) — **UI 视觉与交互重构方案**（元素级 + 整体体验：页面骨架、组件规格、画布/编排台、里程碑）
 - [docs/09-ui-primary-action-audit.md](docs/09-ui-primary-action-audit.md) — **每视图主操作审计**（一屏一主 CTA 的走查记录）
+- [docs/10-upload-clean-backlog.md](docs/10-upload-clean-backlog.md) — **上传/清洗环节调研后暂缓待办**（编码置信度 / 流式上传 / 规则外置等）
+- [docs/11-condense-v0.md](docs/11-condense-v0.md) — **视频向章节精简 v0**（提示词研究 / 数据模型 / 对照页 / 手动修正）
 
 ## 技术栈（本地单机版）
 

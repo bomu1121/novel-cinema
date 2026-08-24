@@ -42,8 +42,10 @@ export async function POST(request: NextRequest) {
         source_file_name: file.name,
         total_chars: clean.totalChars,
         status: "draft",
+        source_encoding: clean.encoding,
+        parse_report: clean.report,
       })
-      .select("id, title, status, total_chars, created_at")
+      .select("id, title, status, total_chars, created_at, source_encoding, parse_report")
       .single();
 
     if (bookError || !book) {
@@ -86,6 +88,8 @@ export async function POST(request: NextRequest) {
       book,
       encoding: clean.encoding,
       warnings: clean.warnings,
+      report: clean.report,
+      totalChars: clean.totalChars,
       chapters: clean.chapters.map((ch) => ({
         idx: ch.idx,
         kind: ch.kind,
