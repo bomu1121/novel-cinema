@@ -9,12 +9,12 @@
 export const CONTROL_BASE =
   "h-10 w-full rounded-md border bg-surface px-3 text-body text-text caret-accent " +
   "placeholder:text-text-subtle transition-all duration-fast " +
-  "focus:outline-none focus:ring-2 focus:ring-accent/25 focus:border-accent " +
+  "focus:outline-none " +
   "disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-text-muted " +
   "selection:bg-accent selection:text-on-accent";
 
 export function controlBorder(invalid: boolean): string {
   return invalid
-    ? "border-stale hover:border-stale/80 focus:border-stale focus:ring-stale/20"
-    : "border-border hover:border-border-strong active:border-accent/60 focus:border-accent focus:ring-accent/25";
+    ? "border-stale hover:border-stale/80 focus:border-stale focus:shadow-[0_0_0_1px_var(--st-stale)]"
+    : "border-border hover:border-border-strong active:border-accent/60 focus:border-accent focus:shadow-[0_0_0_1px_var(--accent)]";
 }

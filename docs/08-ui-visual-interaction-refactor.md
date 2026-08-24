@@ -247,12 +247,12 @@ src/components/ui/
 ```
 Field
 ├─ Label（13px, 500, text-text）
-├─ Control（h-10, rounded-md, border-border, bg-surface-1, px-3, text-body, focus:border-accent focus:ring-2 ring-accent/25）
+├─ Control（h-10, rounded-md, border-border, bg-surface-1, px-3, text-body, focus:border-accent focus:shadow-[0_0_0_1px_accent]）
 ├─ Hint（12px, text-text-subtle）
 └─ Error（12px, text-stale, role=alert）
 ```
 
-- 状态：default / hover(`border-strong`) / focus(`accent` ring) / disabled(`bg-surface-2 text-text-subtle cursor-not-allowed`) / error(`border-stale ring-stale/20`) / readOnly。
+- 状态：default / hover(`border-strong`) / focus(`accent` 边框 + 1px 同色 shadow，视觉上等效 2px 边框，不与全局 outline 叠加) / disabled(`bg-surface-2 text-text-subtle cursor-not-allowed`) / error(`border-stale` + stale shadow) / readOnly。
 - Select：2–3 个静态选项用 chip/radio 组；长列表用原生 select + chevron。
 - Textarea：`min-h-[80px]`，可拖拽 resize，代码/JSON 用 `font-mono`。
 - 所有表单控件必须能纯键盘操作，label 用 `htmlFor`。

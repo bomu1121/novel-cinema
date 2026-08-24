@@ -161,6 +161,13 @@ body {
   outline-offset: 2px;
 }
 
+/* 表单控件使用自己的 focus:border + focus:shadow 焦点样式，避免与全局 outline 叠加成三层边框 */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
+
 /* reduced-motion 全局兜底（W3C C39）：内容型预览动画（kb-*）需静态兜底，见下方 */
 @media (prefers-reduced-motion: reduce) {
   *,
