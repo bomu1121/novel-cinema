@@ -1,17 +1,18 @@
 "use client";
 
 import { forwardRef, type SelectHTMLAttributes } from "react";
+import { CONTROL_BASE, controlBorder } from "./control-styles";
 
 /**
- * 统一下拉选择（docs/08 §5.2）：与 Input 同一视觉语言。
+ * 统一下拉选择（docs/08 §5.2 + 输入框重构）：与 Input 同一视觉语言。
  * 2–3 个静态选项应优先用 chip/radio 组（docs/07 V2 lint 原则）。
  */
 export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   invalid?: boolean;
 }
 
-const BASE =
-  "h-10 w-full appearance-none rounded-md border bg-surface px-3 pr-8 text-body text-text transition-all duration-fast focus:shadow-card focus:outline-none disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-text-subtle";
+// 下拉右侧需要给 chevron 留空间，把默认 px-3 替换为 pl-3 pr-8
+const BASE = CONTROL_BASE.replace("px-3", "pl-3 pr-8");
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
   { invalid, className = "", children, ...rest },
@@ -22,11 +23,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
       <select
         ref={ref}
         aria-invalid={invalid || undefined}
-        className={`${BASE} ${
-          invalid
-            ? "border-stale focus:border-stale focus:ring-2 focus:ring-stale/20"
-            : "border-border hover:border-border-strong focus:border-accent focus:ring-2 focus:ring-accent/25"
-        } ${className}`}
+        className={`${BASE} ${controlBorder(!!invalid)} ${className}`}
         {...rest}
       >
         {children}
