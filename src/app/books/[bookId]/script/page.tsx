@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ShortcutHelp } from "@/components/ui/shortcut-help";
+import { PageShell } from "@/components/ui/page-shell";
 import { JobRunner } from "@/components/jobs/job-runner";
 import { StagedReviewPanel } from "@/components/jobs/staged-review-panel";
 import { PlanSheet } from "@/components/jobs/plan-sheet";
@@ -192,7 +193,7 @@ export default function ScriptPage() {
   }
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 px-6 py-12">
+    <PageShell className="space-y-6">
       <PageHeader
         title="改编脚本审校台"
         meta="签核点 B"
@@ -417,6 +418,6 @@ export default function ScriptPage() {
           { keys: "?", label: "打开/关闭快捷键帮助" },
         ]}
       />
-    </main>
+    </PageShell>
   );
 }

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { StatusPill } from "@/components/ui/status-badge";
 import { PageHeader } from "@/components/ui/page-header";
+import { PageShell } from "@/components/ui/page-shell";
 import { Card } from "@/components/ui/card";
 import { JobRunner } from "@/components/jobs/job-runner";
 
@@ -96,7 +97,7 @@ export default function VoicePage() {
   const red = data.rows.filter((r) => r.take?.error).length;
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 px-6 py-12">
+    <PageShell className="space-y-6">
       <PageHeader
         title="多角色配音"
         meta="签核点 E"
@@ -174,6 +175,6 @@ export default function VoicePage() {
           </Card>
         ))}
       </div>
-    </main>
+    </PageShell>
   );
 }

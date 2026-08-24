@@ -8,6 +8,7 @@ import { ErrorBanner } from "@/components/ui/error-banner";
 import { StatusPill } from "@/components/ui/status-badge";
 import { ImpactPill } from "@/components/ui/impact-pill";
 import { PageHeader } from "@/components/ui/page-header";
+import { PageShell } from "@/components/ui/page-shell";
 import { SectionCard } from "@/components/ui/section-card";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -281,7 +282,7 @@ export default function WorkbenchPage() {
   const cur = (key: string, row: any, field: string) => edits[key]?.[field] ?? row?.[field];
 
   return (
-    <main className="mx-auto max-w-6xl space-y-6 px-6 py-12">
+    <PageShell size="wide" className="space-y-6">
       <PageHeader
         title="编排台"
         meta="中间态可视化 + 高级 JSON + 节点重跑"
@@ -677,7 +678,7 @@ export default function WorkbenchPage() {
           </Card>
         ))}
       </section>
-    </main>
+    </PageShell>
   );
 }
 

@@ -7,6 +7,7 @@ import { ErrorBanner } from "@/components/ui/error-banner";
 import { StatusPill } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
+import { PageShell } from "@/components/ui/page-shell";
 import { Card } from "@/components/ui/card";
 import { JobRunner } from "@/components/jobs/job-runner";
 
@@ -108,7 +109,7 @@ export default function AssetsPage() {
   const compareAssets = data.assets.filter((a) => compareIds.includes(a.id));
 
   return (
-    <main className="mx-auto max-w-5xl space-y-8 px-6 py-12">
+    <PageShell className="space-y-8">
       <PageHeader
         title="资产库"
         meta="签核点 C"
@@ -297,6 +298,6 @@ export default function AssetsPage() {
           </div>
         </div>
       )}
-    </main>
+    </PageShell>
   );
 }

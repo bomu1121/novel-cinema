@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { PageShell } from "@/components/ui/page-shell";
 
 interface BookSummary {
   id: string;
@@ -89,7 +90,7 @@ export default function HomePage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl space-y-8 px-6 py-12">
+    <PageShell size="narrow" className="space-y-8">
       <PageHeader
         title="小说影像化工作台"
         description="M0 阶段：上传一章 txt → 编码探测 + 清洗 + 切章。后续节点按 docs/02 流水线逐步接入。"
@@ -212,6 +213,6 @@ export default function HomePage() {
           )}
         </div>
       </section>
-    </main>
+    </PageShell>
   );
 }

@@ -8,6 +8,7 @@ import { StatusPill } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PhaseRail } from "@/components/ui/phase-rail";
 import { PageHeader } from "@/components/ui/page-header";
+import { PageShell } from "@/components/ui/page-shell";
 
 /**
  * 设计系统风格指南（docs/08 §8）：M0 视觉定稿与截图基线。
@@ -15,7 +16,7 @@ import { PageHeader } from "@/components/ui/page-header";
  */
 export default function UIStyleGuidePage() {
   return (
-    <main className="mx-auto max-w-5xl space-y-10 px-6 py-10">
+    <PageShell className="space-y-10">
       <PageHeader
         title="UI 风格指南"
         description="docs/08 M0 设计基座：胶片青 accent、双字体、统一表单/按钮/卡片/状态。"
@@ -103,6 +104,6 @@ export default function UIStyleGuidePage() {
         <h2 className="font-display text-title font-semibold">空态</h2>
         <EmptyState title="还没有分镜" description="前置条件：改编脚本 → 资产生成（背景）→ 点“构建分镜”。" />
       </section>
-    </main>
+    </PageShell>
   );
 }

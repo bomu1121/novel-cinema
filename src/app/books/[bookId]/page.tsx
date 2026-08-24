@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { PhaseRail } from "@/components/ui/phase-rail";
 import { Card } from "@/components/ui/card";
 import { ListRow } from "@/components/ui/list-row";
+import { PageShell } from "@/components/ui/page-shell";
 
 interface ChapterSummary {
   id: string;
@@ -76,7 +77,7 @@ export default function BookDetailPage() {
   }, [bookId]);
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 px-6 py-10">
+    <PageShell className="space-y-6">
       <PageHeader
         title={book?.title ?? "项目"}
         backHref="/"
@@ -143,6 +144,6 @@ export default function BookDetailPage() {
           </ul>
         )}
       </section>
-    </main>
+    </PageShell>
   );
 }

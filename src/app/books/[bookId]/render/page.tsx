@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
+import { PageShell } from "@/components/ui/page-shell";
 import { Card } from "@/components/ui/card";
 
 interface RenderJob {
@@ -64,7 +65,7 @@ export default function RenderPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 px-6 py-12">
+    <PageShell size="narrow" className="space-y-6">
       <PageHeader
         title="渲染"
         meta="签核 F"
@@ -127,6 +128,6 @@ export default function RenderPage() {
           </div>
         )}
       </section>
-    </main>
+    </PageShell>
   );
 }

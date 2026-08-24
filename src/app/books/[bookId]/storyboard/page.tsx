@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { ShortcutHelp } from "@/components/ui/shortcut-help";
+import { PageShell } from "@/components/ui/page-shell";
 import { JobRunner } from "@/components/jobs/job-runner";
 import { StagedReviewPanel } from "@/components/jobs/staged-review-panel";
 import { useToast } from "@/components/toast";
@@ -154,7 +155,7 @@ export default function StoryboardPage() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl space-y-6 px-6 py-12">
+    <PageShell size="wide" className="space-y-6">
       <PageHeader
         title="分镜时间轴"
         meta="签核点 D"
@@ -328,6 +329,6 @@ export default function StoryboardPage() {
           { keys: "?", label: "打开/关闭快捷键帮助" },
         ]}
       />
-    </main>
+    </PageShell>
   );
 }
