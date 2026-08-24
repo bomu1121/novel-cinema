@@ -21,6 +21,7 @@ import { TimeMachine } from "@/components/jobs/time-machine";
 import { CommandPalette } from "@/components/jobs/command-palette";
 import { ShortcutHelp } from "@/components/ui/shortcut-help";
 import { CostMeter } from "@/components/cost-meter";
+import { MissionControl } from "@/components/jobs/mission-control";
 import { useJob } from "@/lib/ui/use-job";
 import type { GraphNode } from "@/lib/pipeline/graph";
 import { CAMERAS, EMOTIONS, ENTER_EXIT, TRANSITIONS } from "@/lib/ui/enums";
@@ -273,6 +274,7 @@ export default function WorkbenchPage() {
       <ErrorBanner message={error} onDismiss={() => setError(null)} />
 
       <CostMeter bookId={bookId} />
+      <MissionControl bookId={bookId} />
       <ReviewInbox bookId={bookId} />
       <TimeMachine bookId={bookId} />
 
