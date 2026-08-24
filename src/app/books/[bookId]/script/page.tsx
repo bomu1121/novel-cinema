@@ -360,12 +360,14 @@ export default function ScriptPage() {
               </div>
 
               <Textarea
+                aria-label="台词"
                 value={edit.text}
                 onChange={(e) => setEdit(beat.id, { text: e.target.value })}
                 rows={2}
                 className="mt-2"
               />
               <Input
+                aria-label="画面说明"
                 value={edit.visual_note ?? ""}
                 onChange={(e) => setEdit(beat.id, { visual_note: e.target.value })}
                 className="mt-2"
@@ -375,6 +377,7 @@ export default function ScriptPage() {
                 <label className="flex items-center gap-1">
                   情绪
                   <Select
+                    aria-label="情绪"
                     value={edit.emotion}
                     onChange={(e) => setEdit(beat.id, { emotion: e.target.value })}
                     className="w-32"

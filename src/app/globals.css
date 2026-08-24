@@ -21,13 +21,13 @@
   --surface-invert: #18181b;
   --inverse: #ffffff;
 
-  /* —— 审阅状态色（族 A，docs/06 §5.3） —— */
-  --st-approved: #059669;
-  --st-review: #2563eb;
-  --st-draft: #71717a;
-  --st-stale: #dc2626;
-  --st-regen: #d97706;
-  --st-rejected: #a1a1aa;
+  /* —— 审阅状态色（族 A，docs/06 §5.3；加深一档保证 tint 底上 AA） —— */
+  --st-approved: #047857;
+  --st-review: #1d4ed8;
+  --st-draft: #5f5f66;
+  --st-stale: #b91c1c;
+  --st-regen: #92400e;
+  --st-rejected: #6b7280;
 
   /* —— 交互强调色（docs/07 V1 + docs/08 §2.1）：胶片青，不用 AI 默认靛蓝 —— */
   --accent: #0f766e;
@@ -36,10 +36,10 @@
   --accent-soft: #f0fdfa;
   --on-accent: #ffffff;
 
-  /* —— 领域标签色（docs/07 V9）：非状态、非交互的领域 chip，也必须走令牌 —— */
-  --clue: #d97706;
-  --spoiler: #dc2626;
-  --character: #2563eb;
+  /* —— 领域标签色（docs/07 V9）：非状态、非交互的领域 chip，也必须走令牌；加深保证 tint 底 AA —— */
+  --clue: #92400e;
+  --spoiler: #b91c1c;
+  --character: #1d4ed8;
 
   /* —— 动效时长（对齐 Material 3 三档：short 50-200 / medium 200-400 / long 400-700） —— */
   --dur-instant: 100ms;
@@ -74,12 +74,22 @@
   --edge-strong: #3f3f46;
   --ink: #f4f4f5;
   --ink-muted: #a1a1aa;
-  --ink-subtle: #71717a;
+  --ink-subtle: #a1a1aa;
   --accent: #2dd4bf;
   --accent-hover: #5eead4;
   --accent-active: #14b8a6;
   --accent-soft: rgba(45, 212, 191, 0.16);
   --on-accent: #0c0c0e;
+  /* 暗色画布下状态/领域色提亮，保证 tint 底与深底上 AA */
+  --st-approved: #34d399;
+  --st-review: #60a5fa;
+  --st-draft: #a1a1aa;
+  --st-stale: #f87171;
+  --st-regen: #fbbf24;
+  --st-rejected: #9ca3af;
+  --clue: #fbbf24;
+  --spoiler: #f87171;
+  --character: #60a5fa;
   /* surface-invert / inverse 保持常量：深底黑场与浅字在暗色下不变 */
 }
 

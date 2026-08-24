@@ -394,6 +394,7 @@ export default function WorkbenchPage() {
               <label className="flex-1 text-xs">
                 声线
                 <Select
+                  aria-label="声线"
                   value={String(cur(`characters:${c.id}`, c, "voice_profile_id") ?? "")}
                   onChange={(e) => edit(`characters:${c.id}`, "voice_profile_id", e.target.value || null)}
                   className="mt-1"
@@ -434,6 +435,7 @@ export default function WorkbenchPage() {
                 value={String(cur(`voice_profiles:${v.id}`, v, "provider_voice_id") ?? "")}
                 onChange={(e) => edit(`voice_profiles:${v.id}`, "provider_voice_id", e.target.value)}
                 className="max-w-72"
+                aria-label="火山音色 ID"
                 placeholder="火山音色 ID"
               />
               <button onClick={() => save("voice_profiles", v.id, v)} className="rounded border px-2 py-1">保存</button>
@@ -451,6 +453,7 @@ export default function WorkbenchPage() {
             <div className="flex flex-wrap items-start gap-2">
               <span className="mt-2 w-8">#{b.idx}</span>
               <Select
+                aria-label="说话人"
                 value={String(cur(`beats:${b.id}`, b, "character_id") ?? "")}
                 onChange={(e) => edit(`beats:${b.id}`, "character_id", e.target.value || null)}
                 className="max-w-40"
@@ -461,6 +464,7 @@ export default function WorkbenchPage() {
                 ))}
               </Select>
               <Select
+                aria-label="说话类型"
                 value={String(cur(`beats:${b.id}`, b, "speaker_type") ?? "narrator")}
                 onChange={(e) => edit(`beats:${b.id}`, "speaker_type", e.target.value)}
                 className="max-w-32"
@@ -471,6 +475,7 @@ export default function WorkbenchPage() {
                 <option value="none">无</option>
               </Select>
               <Select
+                aria-label="情绪"
                 value={String(cur(`beats:${b.id}`, b, "emotion") ?? "neutral")}
                 onChange={(e) => edit(`beats:${b.id}`, "emotion", e.target.value)}
                 className="max-w-36"
@@ -480,6 +485,7 @@ export default function WorkbenchPage() {
                 ))}
               </Select>
               <Textarea
+                aria-label="台词"
                 value={String(cur(`beats:${b.id}`, b, "text") ?? "")}
                 onChange={(e) => edit(`beats:${b.id}`, "text", e.target.value)}
                 rows={2}
@@ -504,6 +510,7 @@ export default function WorkbenchPage() {
               <div className="flex flex-wrap items-end gap-2">
                 <span className="font-medium">beat#{shot.beat_id?.slice(0, 4)} · shot{shot.idx}</span>
                 <Select
+                  aria-label="机位"
                   value={String(cur(`shots:${shot.id}`, shot, "camera") ?? "static")}
                   onChange={(e) => edit(`shots:${shot.id}`, "camera", e.target.value)}
                   className="max-w-40"
@@ -511,6 +518,7 @@ export default function WorkbenchPage() {
                   {CAMERAS.map((c) => <option key={c} value={c}>{c}</option>)}
                 </Select>
                 <Select
+                  aria-label="入场转场"
                   value={String(cur(`shots:${shot.id}`, shot, "transition_in") ?? "cut")}
                   onChange={(e) => edit(`shots:${shot.id}`, "transition_in", e.target.value)}
                   className="max-w-40"
@@ -518,6 +526,7 @@ export default function WorkbenchPage() {
                   {TRANSITIONS.map((t) => <option key={t} value={t}>进:{t}</option>)}
                 </Select>
                 <Select
+                  aria-label="退场转场"
                   value={String(cur(`shots:${shot.id}`, shot, "transition_out") ?? "cut")}
                   onChange={(e) => edit(`shots:${shot.id}`, "transition_out", e.target.value)}
                   className="max-w-40"
@@ -525,6 +534,7 @@ export default function WorkbenchPage() {
                   {TRANSITIONS.map((t) => <option key={t} value={t}>出:{t}</option>)}
                 </Select>
                 <Input
+                  aria-label="镜头时长"
                   type="number" step={0.5} min={0.5}
                   value={Number(cur(`shots:${shot.id}`, shot, "duration_sec") ?? 0)}
                   onChange={(e) => edit(`shots:${shot.id}`, "duration_sec", Number(e.target.value))}
@@ -542,6 +552,7 @@ export default function WorkbenchPage() {
                     <div className="flex flex-wrap items-end gap-2">
                       <span className="font-medium">{layer.kind}·layer{layer.idx}</span>
                       <Select
+                        aria-label="图层人物"
                         value={String(cur(`shot_layers:${layer.id}`, layer, "character_id") ?? "")}
                         onChange={(e) => edit(`shot_layers:${layer.id}`, "character_id", e.target.value || null)}
                         className="max-w-40"
@@ -550,6 +561,7 @@ export default function WorkbenchPage() {
                         {(data?.characters ?? []).map((c) => <option key={c.id} value={c.id}>{c.canonical_name}</option>)}
                       </Select>
                       <Select
+                        aria-label="图层图像"
                         value={String(cur(`shot_layers:${layer.id}`, layer, "asset_id") ?? "")}
                         onChange={(e) => edit(`shot_layers:${layer.id}`, "asset_id", e.target.value || null)}
                         className="max-w-64"
@@ -560,6 +572,7 @@ export default function WorkbenchPage() {
                         ))}
                       </Select>
                       <Select
+                        aria-label="入场动画"
                         value={String(cur(`shot_layers:${layer.id}`, layer, "enter_animation") ?? "none")}
                         onChange={(e) => edit(`shot_layers:${layer.id}`, "enter_animation", e.target.value)}
                         className="max-w-36"
@@ -567,6 +580,7 @@ export default function WorkbenchPage() {
                         {ENTER_EXIT.map((x) => <option key={x} value={x}>入场:{x}</option>)}
                       </Select>
                       <Select
+                        aria-label="退场动画"
                         value={String(cur(`shot_layers:${layer.id}`, layer, "exit_animation") ?? "none")}
                         onChange={(e) => edit(`shot_layers:${layer.id}`, "exit_animation", e.target.value)}
                         className="max-w-36"
@@ -592,6 +606,7 @@ export default function WorkbenchPage() {
           <Card className="text-xs">
             <div className="flex gap-2">
               <Textarea
+                aria-label="视觉风格"
                 value={String(cur(`style_bibles:${data.styleBible.id}`, data.styleBible, "visual_style") ?? "")}
                 onChange={(e) => edit(`style_bibles:${data.styleBible.id}`, "visual_style", e.target.value)}
                 rows={2}
@@ -618,6 +633,7 @@ export default function WorkbenchPage() {
           <Card key={a.id} className="text-xs">
             <p className="font-medium">{a.kind} · {a.title ?? a.scene_key} · <StatusPill table="assets" status={a.status} /></p>
             <Textarea
+              aria-label="资产 prompt"
               value={String(cur(`assets:${a.id}`, a, "prompt") ?? "")}
               onChange={(e) => edit(`assets:${a.id}`, "prompt", e.target.value)}
               rows={2}
@@ -648,6 +664,7 @@ function JsonDetails({
       <summary className="cursor-pointer text-text-subtle">高级 JSON 编辑</summary>
       <Textarea
         mono
+        aria-label="高级 JSON"
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={Math.min(10, text.split("\n").length + 1)}

@@ -285,6 +285,7 @@ export default function StoryboardPage() {
                 type="number"
                 step={0.5}
                 min={0.5}
+                aria-label="镜头时长"
                 value={durations[track.shotId] ?? track.duration_sec}
                 onChange={(e) =>
                   setDurations((prev) => ({ ...prev, [track.shotId]: Number(e.target.value) }))
@@ -292,6 +293,7 @@ export default function StoryboardPage() {
                 className="w-16"
               />
               <Select
+                aria-label="背景"
                 value={backgrounds[track.shotId] ?? ""}
                 onChange={(e) =>
                   setBackgrounds((prev) => ({ ...prev, [track.shotId]: e.target.value }))

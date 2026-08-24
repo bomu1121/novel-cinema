@@ -66,7 +66,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
         )}
         {children}
         {shortcut && (
-          <kbd className="ml-0.5 rounded border border-current/30 px-1 text-[10px] leading-4 opacity-60">
+          <kbd className="ml-0.5 rounded border border-current/30 px-1 text-[10px] leading-4">
             {shortcut}
           </kbd>
         )}

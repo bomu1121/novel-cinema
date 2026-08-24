@@ -62,20 +62,20 @@ export default function UIStyleGuidePage() {
         <h2 className="font-display text-title font-semibold">表单</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="书名" htmlFor="ui-title" required>
-            <Input id="ui-title" placeholder="输入书名" defaultValue="雨夜疑案" />
+            <Input id="ui-title" aria-label="书名" placeholder="输入书名" defaultValue="雨夜疑案" />
           </Field>
           <Field label="角色" htmlFor="ui-role">
-            <Select id="ui-role" defaultValue="林晚">
+            <Select id="ui-role" aria-label="角色" defaultValue="林晚">
               <option>林晚</option>
               <option>沈默</option>
               <option>旁白</option>
             </Select>
           </Field>
           <Field label="错误示例" htmlFor="ui-error" error="这里不能为空">
-            <Input id="ui-error" invalid placeholder="错误状态" />
+            <Input id="ui-error" aria-label="错误示例" invalid placeholder="错误状态" />
           </Field>
           <Field label="备注" htmlFor="ui-note" hint="支持多行文本">
-            <Textarea id="ui-note" placeholder="输入备注" />
+            <Textarea id="ui-note" aria-label="备注" placeholder="输入备注" />
           </Field>
         </div>
       </section>
