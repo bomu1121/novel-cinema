@@ -93,7 +93,7 @@ export default function HomePage() {
     <PageShell size="narrow" className="space-y-8">
       <PageHeader
         title="小说影像化工作台"
-        description="M0 阶段：上传一章 txt → 编码探测 + 清洗 + 切章。后续节点按 docs/02 流水线逐步接入。"
+        description="上传一章 txt → 分析 → 改编 → 资产生成 → 配音 → 渲染，产出可发布的视频作品。M0 阶段先打通上传、清洗与切章。"
       />
 
       <section className="rounded-xl border border-accent/20 bg-accent-soft/40 p-6 sm:p-8">
@@ -102,8 +102,7 @@ export default function HomePage() {
           把小说变成影像
         </h2>
         <p className="mt-2 max-w-2xl text-body leading-6 text-text-muted">
-          上传一章 txt，经过全书理解、章节改编、分层资产、多角色配音与确定性渲染，
-          产出可发布的视频作品。
+          上传一章 txt，经过全书理解、章节改编、分层资产、多角色配音与确定性渲染，产出可发布的视频作品。
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           {["分析", "改编", "资产", "配音", "渲染"].map((step, i) => (
@@ -139,7 +138,7 @@ export default function HomePage() {
         }`}
       >
         <Field label="书名（可选，默认取文件名）" htmlFor="title">
-          <Input id="title" name="title" placeholder="例如：雨夜疑案" />
+          <Input id="title" name="title" placeholder="例如：雨夜疑案（可选）" />
         </Field>
 
         <Field label=".txt 文件（≤ 50MB）" htmlFor="file" hint={droppedFile ? `已选择：${droppedFile.name}` : dragOver ? "松开以上传" : "也可以把文件拖进这个区域"}>
@@ -148,7 +147,7 @@ export default function HomePage() {
             name="file"
             type="file"
             accept=".txt,text/plain"
-            className="pt-1.5 text-text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-surface-invert file:px-4 file:py-2 file:text-sm file:text-inverse"
+            className="text-text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-accent file:px-4 file:py-2 file:text-sm file:text-on-accent"
           />
         </Field>
 

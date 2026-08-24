@@ -39,7 +39,6 @@ export function PageHeader({
             {title}
             {meta && <span className="ml-2 align-middle text-sm font-normal text-text-subtle">{meta}</span>}
           </h1>
-          <div aria-hidden className="h-1 w-10 rounded-full bg-accent" />
         </div>
         {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </div>
