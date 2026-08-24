@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { getSupabaseAdmin } from "./db";
-import { downstreamImpact } from "./pipeline/graph";
+import { downstreamImpact, estimateNode } from "./pipeline/graph";
 
 const createdBookIds: string[] = [];
 
@@ -67,5 +67,24 @@ describe("下游影响计数（docs/06 §4.2 stale 溯源）", () => {
 
     const impacts = await downstreamImpact(bookId, "timelines", timelineId);
     expect(impacts).toContainEqual({ table: "render_jobs", count: 1 });
+  });
+});
+
+describe("estimateNode 三档 gate（docs/07 I3）", () => {
+  it("adapt/storyboard → block；analyze/assets/voice → notify；render → auto", async () => {
+    const bookId = `gate-${randomUUID()}`;
+    const adapt = await estimateNode(bookId, "adapt");
+    const storyboard = await estimateNode(bookId, "storyboard");
+    const analyze = await estimateNode(bookId, "analyze");
+    const assets = await estimateNode(bookId, "assets-phase1");
+    const voice = await estimateNode(bookId, "voice");
+    const render = await estimateNode(bookId, "render");
+
+    expect(adapt.gate).toBe("block");
+    expect(storyboard.gate).toBe("block");
+    expect(analyze.gate).toBe("notify");
+    expect(assets.gate).toBe("notify");
+    expect(voice.gate).toBe("notify");
+    expect(render.gate).toBe("auto");
   });
 });

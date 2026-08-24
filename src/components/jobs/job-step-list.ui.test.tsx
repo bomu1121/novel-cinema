@@ -15,6 +15,7 @@ function makeState(partial: Partial<UseJobState>): UseJobState {
     error: null,
     elapsedMs: 0,
     lastEventAt: null,
+    estimatedMs: null,
     ...partial,
   };
 }

@@ -35,8 +35,21 @@ export interface NodeEstimate {
   reversible: boolean;
   /** 是否走逐条审阅（staged） */
   staged: boolean;
+  /** 风险闸门（docs/07 I3）：auto / notify / block */
+  gate: "auto" | "notify" | "block";
   blockers: string[];
 }
+
+/** 风险闸门（docs/07 I3）：按“对世界做了什么”分级，不看模型置信度 */
+export const NODE_GATE: Record<GraphNode, "auto" | "notify" | "block"> = {
+  analyze: "notify",
+  adapt: "block",
+  "assets-phase1": "notify",
+  "assets-phase2": "notify",
+  storyboard: "block",
+  voice: "notify",
+  render: "auto",
+};
 
 /** 结构化影响预报（docs/06 §4.3）：UI 据此渲染 PlanSheet，文案生成在 UI 层 */
 export async function estimateNode(bookId: string, node: GraphNode): Promise<NodeEstimate> {
@@ -50,6 +63,7 @@ export async function estimateNode(bookId: string, node: GraphNode): Promise<Nod
     overwrites: [],
     reversible: node === "adapt" || node === "storyboard",
     staged: node === "adapt" || node === "storyboard",
+    gate: NODE_GATE[node],
     blockers: [],
   };
 
@@ -79,11 +93,15 @@ export async function estimateNode(bookId: string, node: GraphNode): Promise<Nod
     }
     case "assets-phase1":
     case "assets-phase2": {
-      const plan = await import("@/lib/pipeline/nodes/assets").then((m) => m.listAssetPlan(bookId));
-      const specs = (node === "assets-phase1" ? plan.phase1 : plan.phase2).filter((x) => !x.skipReason);
-      base.imageCalls = specs.length;
-      base.estSeconds = [specs.length * 15, specs.length * 25];
-      if (specs.length === 0) base.blockers.push("生成计划为空");
+      try {
+        const plan = await import("@/lib/pipeline/nodes/assets").then((m) => m.listAssetPlan(bookId));
+        const specs = (node === "assets-phase1" ? plan.phase1 : plan.phase2).filter((x) => !x.skipReason);
+        base.imageCalls = specs.length;
+        base.estSeconds = [specs.length * 15, specs.length * 25];
+        if (specs.length === 0) base.blockers.push("生成计划为空");
+      } catch (err) {
+        base.blockers.push(err instanceof Error ? err.message : String(err));
+      }
       return base;
     }
     case "storyboard": {

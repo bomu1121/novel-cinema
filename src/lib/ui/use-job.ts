@@ -20,6 +20,8 @@ export interface UseJobState {
   elapsedMs: number;
   /** 最近一次收到服务端事件的时间戳（用于停滞检测） */
   lastEventAt: number | null;
+  /** 入队时预估耗时（毫秒），用于任务收据 */
+  estimatedMs: number | null;
 }
 
 interface PolledJob {
@@ -45,6 +47,7 @@ const IDLE: UseJobState = {
   error: null,
   elapsedMs: 0,
   lastEventAt: null,
+  estimatedMs: null,
 };
 
 function applyEvent(state: UseJobState, e: JobEvent): UseJobState {
@@ -121,6 +124,13 @@ export function useJob(bookId: string, jobId: string | null): UseJobState & { ca
         lastSeqRef.current = 0;
         const snap = data.job;
         applyEvents(data.events, snap.status);
+        const estimate = (data.job as unknown as { inputRef?: { _estimate?: { estSeconds?: [number, number] } } })
+          .inputRef?._estimate?.estSeconds;
+        setState((s) =>
+          s.jobId === jobId
+            ? { ...s, estimatedMs: Array.isArray(estimate) ? (estimate[1] ?? estimate[0]) * 1000 : null }
+            : s,
+        );
         startedAtRef.current = Date.now();
       })
       .catch(() => {

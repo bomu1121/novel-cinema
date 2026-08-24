@@ -83,6 +83,14 @@ export function PlanSheet({ bookId, node, onExecute, onCancel, busy, className =
               )}
             </dd>
           </div>
+          <div className="flex gap-2">
+            <dt className="w-16 shrink-0 text-text-subtle">风险闸门</dt>
+            <dd>
+              {e.gate === "auto" && <span className="text-text-muted">自动执行（低风险可逆）</span>}
+              {e.gate === "notify" && <span className="text-accent">执行后通知（带撤销）</span>}
+              {e.gate === "block" && <span className="text-stale">需逐条审阅（block）</span>}
+            </dd>
+          </div>
         </dl>
       )}
 

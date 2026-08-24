@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { appendEvent, createJobRow, sweepOrphanJobs, activeJobs } from "@/lib/jobs/progress";
 import { spawnWorker } from "@/lib/jobs/worker";
+import { estimateNode, type GraphNode } from "@/lib/pipeline/graph";
 
 const VALID_NODES = new Set(["analyze", "adapt", "assets-phase1", "assets-phase2", "storyboard", "voice"]);
 
@@ -14,7 +15,12 @@ export async function POST(request: Request, ctx: Ctx) {
     return NextResponse.json({ error: `未知节点: ${body.node}` }, { status: 400 });
   }
   sweepOrphanJobs();
-  const jobId = createJobRow(bookId, body.node, body.input ?? {});
+  const estimate = await estimateNode(bookId, body.node as GraphNode).catch(() => null);
+  const input = {
+    ...(body.input ?? {}),
+    ...(estimate ? { _estimate: { estSeconds: estimate.estSeconds, gate: estimate.gate } } : {}),
+  };
+  const jobId = createJobRow(bookId, body.node, input);
   appendEvent(jobId, "step", { label: "排队中", index: 0, total: 0 });
   spawnWorker(jobId);
   return NextResponse.json({ ok: true, jobId });

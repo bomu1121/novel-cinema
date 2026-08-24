@@ -106,7 +106,15 @@ export function JobStepList({ state, onCancel, className = "", stallMs = 30000 }
         </div>
       )}
 
-      {state.status === "succeeded" && <p className="text-approved">✓ 已完成</p>}
+      {state.status === "succeeded" && (
+        <p className="text-approved">
+          ✓ 已完成
+          {state.elapsedMs > 0 &&
+            (state.estimatedMs != null
+              ? ` · 预估 ${formatElapsed(state.estimatedMs)} / 实际 ${formatElapsed(state.elapsedMs)}`
+              : ` · 用时 ${formatElapsed(state.elapsedMs)}`)}
+        </p>
+      )}
       {state.status === "cancelled" && (
         <p className="text-text-muted">
           已取消{state.step ? `（完成到：${state.step}）` : ""}，可重新执行

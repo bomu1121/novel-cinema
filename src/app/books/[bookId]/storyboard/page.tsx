@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { ShortcutHelp } from "@/components/ui/shortcut-help";
 import { JobRunner } from "@/components/jobs/job-runner";
 import { StagedReviewPanel } from "@/components/jobs/staged-review-panel";
 import { useToast } from "@/components/toast";
@@ -314,6 +315,17 @@ export default function StoryboardPage() {
           </Card>
         ))}
       </div>
+
+      <ShortcutHelp
+        items={[
+          { keys: "j / k", label: "审阅列表上下移动" },
+          { keys: "a", label: "接受当前变更" },
+          { keys: "r", label: "驳回当前变更" },
+          { keys: "u", label: "撤销上一条决策" },
+          { keys: "Enter", label: "应用已选决策" },
+          { keys: "?", label: "打开/关闭快捷键帮助" },
+        ]}
+      />
     </main>
   );
 }
