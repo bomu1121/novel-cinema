@@ -12,6 +12,8 @@
     "test:e2e": "playwright test",
     "seed:fixture": "tsx scripts/seed-fixture.ts",
     "seed:magyan": "tsx scripts/seed-fixture.ts",
+    "heal:entities": "tsx scripts/heal-entities.ts",
+    "heal:characters": "tsx scripts/heal-entities.ts --type characters",
     "lint:ui": "node .claude/skills/nc-ui-contract/scripts/lint-ui-contract.mjs",
     "render:local": "tsx scripts/render-local.ts",
     "pipeline:local": "tsx scripts/pipeline-local.ts",

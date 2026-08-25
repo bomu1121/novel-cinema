@@ -39,7 +39,8 @@ export interface CheckpointInfo {
 const SNAPSHOT_TABLES = new Set([
   "source_chapters", "condensed_chapters", "characters", "character_relations", "clues", "locations",
   "style_bibles", "adapted_chapters", "beats", "shots", "shot_layers",
-  "voice_profiles", "voice_takes", "assets", "timelines", "review_tasks",
+  "voice_profiles", "voice_takes", "assets", "timelines", "timeline_events",
+  "chapter_summaries", "items", "review_tasks",
 ]);
 
 function assertTable(table: string): void {
