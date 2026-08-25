@@ -108,11 +108,11 @@ novel-cinema/
 
 ### T4 · 单章分析（1 天）
 
-- [x] `schemas/analysis.ts`：chunkAnalysis + styleBibleProposals 的 zod schema
-- [x] `prompts/analyze.ts`：块抽取与风格圣经候选的提示词模板
-- [x] `nodes/analyze.ts`：analyzeChapter / persistChapterAnalysis（人物别名合并、地点/物品去重、线索覆盖、时间线幂等）/ proposeStyleBibles / approveStyleBible
-- [x] API：`POST /api/books/[bookId]/analyze`、`GET .../bible`、`POST .../bible/approve`
-- [x] 档案页（`/books/[bookId]/bible`）：摘要/人物/线索/时间线展示 + 风格圣经候选点选批准（签核 A 简版）
+- [x] `schemas/analysis.ts`：chunkAnalysis + styleBibleProposals 的 zod schema（v2 增加 rationale）
+- [x] `prompts/analyze.ts`：块抽取提示词；风格圣经候选提示词 v2（全书聚合版，docs/14）
+- [x] `nodes/analyze.ts`：analyzeChapter / persistChapterAnalysis（人物别名合并、地点/物品去重、线索覆盖、时间线幂等）/ proposeStyleBiblesForBook（全书聚合，独立书级节点）/ persistStyleProposals（批次归档）/ approveStyleBible / restoreStyleProposal
+- [x] API：`POST /api/books/[bookId]/analyze`（不再联动风格候选）、`GET .../bible`（含历史批次）、`POST .../bible/approve`、`POST .../bible/restore`
+- [x] 档案页（`/books/[bookId]/bible`）：摘要/人物/线索/时间线展示 + 风格圣经候选三态（未生成/待审/已锁定）+ 点选批准 + 历史回看/恢复（签核 A 简版，docs/14）
 - [ ] 真实章节验证：LLM key 配好后，用 3000 字样本章跑通并人工核对人物无张冠李戴
 
 **DoD**：3000 字样本章输出 2+ 人物且人工核对无张冠李戴；风格圣经可直接用于出图 prompt。（当前：代码完成，待真实模型验证）

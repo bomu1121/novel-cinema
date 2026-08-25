@@ -2,7 +2,7 @@
 /**
  * 真实数据端到端验证（docs/06 附录 F）
  * 用法：NOVEL_CINEMA_DATA_DIR=... npx tsx scripts/e2e-verify.ts <baseUrl> <txtPath>
- * 流程：上传 → analyze → adapt（staged 审阅+应用）→ 批准风格/本章 → fixture 背景 → storyboard（staged）→ 批准分镜 → voice → cost 一致性
+ * 流程：上传 → analyze → bible.propose → 批准风格（签核 A）→ adapt（staged 审阅+应用）→ 批准本章 → fixture 背景 → storyboard（staged）→ 批准分镜 → voice → cost 一致性
  * 注意：会调用真实 LLM/TTS/ASR（有成本），建议在独立数据目录跑。
  */
 import { readFileSync } from "node:fs";
@@ -67,7 +67,7 @@ async function main() {
   const s2 = getSupabaseAdmin();
   void s2;
 
-  // 2. analyze
+  // 2. analyze（章节分析；不再生成风格候选，docs/14）
   console.log("\n── 节点 1/6：analyze（2 次 LLM）──");
   const estAnalyze = (await get(`/api/books/${bookId}/estimate?node=analyze`)).json;
   const a = await post(`/api/books/${bookId}/jobs`, { node: "analyze" });
@@ -75,10 +75,25 @@ async function main() {
   check("analyze 完成", aj.status === "succeeded", `实际耗时 ${(aj.elapsedMs / 1000).toFixed(0)}s（预报 ${estAnalyze.estSeconds?.[0]}~${estAnalyze.estSeconds?.[1]}s）`);
   const { data: characters } = await s.from("characters").select("id").eq("book_id", bookId);
   const { data: clues } = await s.from("clues").select("id").eq("book_id", bookId);
-  const { data: styleBibles } = await s.from("style_bibles").select("id, proposal_json").eq("book_id", bookId);
   check("人物落库", (characters?.length ?? 0) > 0, `${characters?.length ?? 0} 个`);
   check("线索落库", (clues?.length ?? 0) > 0, `${clues?.length ?? 0} 条`);
-  check("风格候选生成", (styleBibles?.length ?? 0) > 0 && (styleBibles?.[0]?.proposal_json?.length ?? 0) >= 1);
+
+  // 2.5 bible.propose（书级风格候选，全书聚合）
+  console.log("\n── 节点 1.5/6：bible.propose（风格候选，1 次 LLM）──");
+  const estBible = (await get(`/api/books/${bookId}/estimate?node=bible.propose`)).json;
+  const bp = await post(`/api/books/${bookId}/jobs`, { node: "bible.propose" });
+  const bpj = await waitJob(bookId, bp.json.jobId, 240_000);
+  check("bible.propose 完成", bpj.status === "succeeded", `实际耗时 ${(bpj.elapsedMs / 1000).toFixed(0)}s（预报 ${estBible.estSeconds?.[0]}~${estBible.estSeconds?.[1]}s）`);
+  const { data: styleBibles } = await s.from("style_bibles").select("id, proposal_json, status").eq("book_id", bookId);
+  check("风格候选生成", (styleBibles?.length ?? 0) > 0 && (styleBibles?.[0]?.proposal_json?.length ?? 0) >= 1,
+    `v${styleBibles?.[0]?.status} · ${styleBibles?.[0]?.proposal_json?.length ?? 0} 套`);
+
+  // 2.75 签核 A：批准风格方案（adapt 的前置条件）
+  console.log("\n── 签核 A ──");
+  const appB = await post(`/api/books/${bookId}/bible/approve`, { styleBibleId: styleBibles?.[0]?.id, proposalIndex: 0 });
+  check("批准风格方案", appB.status === 200, "");
+  const cps = rawDb.prepare(`SELECT label, origin FROM checkpoints WHERE book_id = ? ORDER BY created_at DESC LIMIT 5`).all(bookId) as Array<{ label: string; origin: string }>;
+  check("批准生成签核点", cps.some((c) => c.origin === "approve"), cps.map((c) => c.label).join(" | "));
 
   // 3. adapt（staged）
   console.log("\n── 节点 2/6：adapt（staged 审阅）──");
@@ -101,13 +116,8 @@ async function main() {
   const { data: reviewTasks } = await s.from("review_tasks").select("id").eq("book_id", bookId).eq("status", "open");
   console.log(`  · 收件箱 open 任务：${reviewTasks?.length ?? 0} 条（红项持久化）`);
 
-  // 4. 批准风格方案 + 本章
-  console.log("\n── 签核 A/B ──");
-  const proposalIndex = styleBibles?.[0]?.proposal_json?.length ? 0 : 0;
-  const appB = await post(`/api/books/${bookId}/bible/approve`, { styleBibleId: styleBibles?.[0]?.id, proposalIndex });
-  check("批准风格方案", appB.status === 200, "");
-  const cps = rawDb.prepare(`SELECT label, origin FROM checkpoints WHERE book_id = ? ORDER BY created_at DESC LIMIT 5`).all(bookId) as Array<{ label: string; origin: string }>;
-  check("批准生成签核点", cps.some((c) => c.origin === "approve"), cps.map((c) => c.label).join(" | "));
+  // 4. 批准本章（签核 B）
+  console.log("\n── 签核 B ──");
   const appS = await post(`/api/books/${bookId}/script/approve`, { adaptedChapterId: adaptedChapters?.[0]?.id });
   check("批准本章", appS.status === 200, "");
 

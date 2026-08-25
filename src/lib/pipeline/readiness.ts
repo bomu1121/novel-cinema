@@ -125,7 +125,7 @@ export async function getBookReadiness(bookId: string): Promise<BookReadiness> {
       title: "全书档案",
       desc: "人物 / 线索 / 风格方案",
       href: "/bible",
-      nodes: ["analyze"],
+      nodes: ["analyze", "bible.propose"],
       rows: (styleRes.data ?? []) as StatusRow[],
     },
     {

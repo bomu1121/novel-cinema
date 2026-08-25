@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/db";
-import {
-  analyzeChapter,
-  persistChapterAnalysis,
-  persistStyleProposals,
-  proposeStyleBibles,
-} from "@/lib/pipeline/nodes/analyze";
+import { analyzeChapter, persistChapterAnalysis } from "@/lib/pipeline/nodes/analyze";
 
 /**
- * M0 版：同步执行“单章粗读 → 落档案 → 风格圣经候选”。
+ * 章节分析（M0 版）：单章粗读 → 落档案。
+ * 风格圣经候选已拆为独立节点 bible.propose（docs/14），不再随章节分析联动刷新。
  * 长任务化（托管队列 + 进度）在 M1 引入。
  */
 export async function POST(
@@ -42,9 +38,6 @@ export async function POST(
     const analysis = await analyzeChapter(bookId, chapterForAnalysis);
     const persisted = await persistChapterAnalysis(bookId, chapterForAnalysis, analysis);
 
-    const proposals = await proposeStyleBibles(bookId, analysis, null);
-    const styleBibleId = await persistStyleProposals(bookId, proposals);
-
     await supabase
       .from("books")
       .update({ status: "analyzing" })
@@ -55,13 +48,9 @@ export async function POST(
       summary: analysis.summary,
       tone: analysis.tone,
       persisted,
-      styleBibleId,
-      styleProposals: proposals.proposals,
-      recommendedIndex: proposals.recommended_index,
     });
   } catch (err) {
     const message = (err as { message?: string })?.message ?? (err instanceof Error ? err.message : String(err));
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-

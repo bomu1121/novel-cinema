@@ -3,7 +3,7 @@ import { appendEvent, createJobRow, sweepOrphanJobs, activeJobs } from "@/lib/jo
 import { spawnWorker } from "@/lib/jobs/worker";
 import { estimateNode, type GraphNode } from "@/lib/pipeline/graph";
 
-const VALID_NODES = new Set(["analyze", "condense", "adapt", "assets-phase1", "assets-phase2", "storyboard", "voice"]);
+const VALID_NODES = new Set(["analyze", "bible.propose", "condense", "adapt", "assets-phase1", "assets-phase2", "storyboard", "voice"]);
 
 type Ctx = { params: Promise<{ bookId: string }> };
 

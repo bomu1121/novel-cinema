@@ -7,8 +7,12 @@ import { getSupabaseAdmin } from "@/lib/db";
 
 export const NODE_GRAPH = {
   analyze: {
-    produces: ["chapter_summaries", "characters", "locations", "clues", "style_bibles"],
+    produces: ["chapter_summaries", "characters", "locations", "clues"],
     consumes: ["source_chapters"],
+  },
+  "bible.propose": {
+    produces: ["style_bibles"],
+    consumes: ["chapter_summaries", "characters", "locations", "clues"],
   },
   condense: {
     produces: ["condensed_chapters"],
@@ -47,6 +51,7 @@ export interface NodeEstimate {
 /** 风险闸门（docs/07 I3）：按“对世界做了什么”分级，不看模型置信度 */
 export const NODE_GATE: Record<GraphNode, "auto" | "notify" | "block"> = {
   analyze: "notify",
+  "bible.propose": "notify",
   condense: "notify",
   adapt: "block",
   "assets-phase1": "notify",
@@ -79,6 +84,15 @@ export async function estimateNode(bookId: string, node: GraphNode): Promise<Nod
       // 实测校准（docs/06 附录 F）：2674 字章节 17~21s
       base.estSeconds = [15, 30];
       if (!ch) base.blockers.push("还没有上传章节");
+      return base;
+    }
+    case "bible.propose": {
+      const { data: summary } = await s.from("chapter_summaries").select("id").eq("book_id", bookId).limit(1).maybeSingle();
+      const { data: style } = await s.from("style_bibles").select("id").eq("book_id", bookId).limit(1).maybeSingle();
+      base.llmCalls = 1;
+      base.estSeconds = [20, 60];
+      if (!summary) base.blockers.push("还没有章节摘要，请先分析章节");
+      if (style) base.overwrites.push({ table: "style_bibles", count: 1 });
       return base;
     }
     case "condense": {

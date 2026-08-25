@@ -9,7 +9,7 @@ export async function GET(
   try {
     const supabase = getSupabaseAdmin();
 
-    const [bookRes, sourceChaptersRes, chaptersRes, charactersRes, locationsRes, itemsRes, cluesRes, eventsRes, styleRes] =
+    const [bookRes, sourceChaptersRes, chaptersRes, charactersRes, locationsRes, itemsRes, cluesRes, eventsRes, styleRes, historyRes] =
       await Promise.all([
         supabase.from("books").select("id, title, status").eq("id", bookId).single(),
         supabase
@@ -44,11 +44,17 @@ export async function GET(
           .order("order_key"),
         supabase
           .from("style_bibles")
-          .select("id, version, status, proposal_json, approved_proposal_index, approved_at")
+          .select("id, version, status, genre, visual_style, art_direction, color_palette, camera_grammar, narration_tone, spoiler_rules, negative_prompt, proposal_json, approved_proposal_index, approved_at, manual_override")
           .eq("book_id", bookId)
           .order("version", { ascending: false })
           .limit(1)
           .maybeSingle(),
+        supabase
+          .from("bible_proposals")
+          .select("id, version, proposal_json, approved_index, note, created_at")
+          .eq("book_id", bookId)
+          .order("version", { ascending: false })
+          .limit(20),
       ]);
 
     return NextResponse.json({
@@ -61,6 +67,7 @@ export async function GET(
       clues: cluesRes.data ?? [],
       events: eventsRes.data ?? [],
       styleBible: styleRes.data ?? null,
+      bibleHistory: historyRes.data ?? [],
     });
   } catch (err) {
     const message = (err as { message?: string })?.message ?? (err instanceof Error ? err.message : String(err));

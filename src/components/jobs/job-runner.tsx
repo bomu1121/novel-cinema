@@ -12,7 +12,7 @@ import { useJob } from "@/lib/ui/use-job";
  */
 export interface JobRunnerProps {
   bookId: string;
-  node: "analyze" | "condense" | "adapt" | "assets-phase1" | "assets-phase2" | "storyboard" | "voice";
+  node: "analyze" | "bible.propose" | "condense" | "adapt" | "assets-phase1" | "assets-phase2" | "storyboard" | "voice";
   label: string;
   /** 入队时随任务一起传递的结构化输入（如 analyze 的 chapterId） */
   input?: Record<string, unknown>;

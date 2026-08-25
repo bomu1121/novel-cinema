@@ -276,7 +276,7 @@ export default function WorkbenchPage() {
       })),
       ...(
         [
-          ["analyze", "① 分析+风格候选"],
+          ["analyze", "① 章节分析"],
           ["adapt", "② 改编脚本"],
           ["assets-phase1", "③a 设定图+背景"],
           ["assets-phase2", "③b 表情变体"],
@@ -328,7 +328,7 @@ export default function WorkbenchPage() {
         <div className="flex flex-wrap gap-2">
           {(
             [
-              ["analyze", "① 分析+风格候选"],
+              ["analyze", "① 章节分析"],
               ["adapt", "② 改编脚本"],
               ["assets-phase1", "③a 设定图+背景"],
               ["assets-phase2", "③b 表情变体"],
@@ -669,7 +669,13 @@ export default function WorkbenchPage() {
               />
               <button onClick={() => save("style_bibles", data.styleBible.id, data.styleBible)} className="rounded border px-3">保存</button>
             </div>
-            <p className="mt-1 text-text-muted">narration_tone：{data.styleBible.narration_tone} · version {data.styleBible.version} · <StatusPill table="style_bibles" status={data.styleBible.status} /></p>
+            <p className="mt-1 text-text-muted">
+              narration_tone：{data.styleBible.narration_tone} · version {data.styleBible.version} ·{" "}
+              <StatusPill table="style_bibles" status={data.styleBible.status} />
+              {data.styleBible.manual_override ? (
+                <span className="ml-2 rounded-full bg-regen/15 px-2 py-0.5 text-regen">手工修订</span>
+              ) : null}
+            </p>
             <JsonDetails table="style_bibles" id={data.styleBible.id} row={data.styleBible} onSave={saveJson} />
           </Card>
         )}

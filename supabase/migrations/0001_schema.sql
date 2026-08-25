@@ -203,9 +203,23 @@ create table style_bibles (
   proposal_json jsonb not null default '[]'::jsonb,
   approved_proposal_index int,
   approved_at timestamptz,
+  manual_override boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- 风格圣经 v2（docs/14）：候选批次归档（append-only 历史，可回看/恢复）
+create table bible_proposals (
+  id uuid primary key default gen_random_uuid(),
+  book_id uuid not null references books(id) on delete cascade,
+  version int not null,
+  proposal_json jsonb not null default '[]'::jsonb,
+  approved_index int,
+  note text,
+  created_at timestamptz not null default now()
+);
+
+create index on bible_proposals (book_id, version);
 
 create table voice_profiles (
   id uuid primary key default gen_random_uuid(),

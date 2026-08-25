@@ -330,9 +330,35 @@ export function getSupabaseUserClient(): FakeClient {
 /** 原生 better-sqlite3 句柄：仅供 lib/ 内部需要事务或原生 SQL 的模块使用（如 checkpoints）。 */
 export const rawDb: Database.Database = database;
 
-/** 在单个事务中执行 fn；抛错则整体回滚。批量快照 / staging 落库必须走这里，避免半批写入。 */
+function sleepSync(ms: number): void {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    // 同步等待（事务是同步 API，不能 await）
+  }
+}
+
+/**
+ * 在单个事务中执行 fn；抛错则整体回滚。批量快照 / staging 落库必须走这里，避免半批写入。
+ * 多进程共享同一库文件（Next 服务端 + jobs worker 子进程）时，
+ * WAL 下 deferred 事务可能撞 SQLITE_BUSY_SNAPSHOT（"database is locked"），
+ * 该错误不走 busy_timeout，这里做有限重试。
+ */
 export function runInTransaction<T>(fn: () => T): T {
-  return database.transaction(fn)();
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      return database.transaction(fn)();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/database is locked|database table is locked|busy/i.test(msg) && attempt < 4) {
+        lastErr = err;
+        sleepSync(20 * (attempt + 1));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
 }
 
 // ---------- SQLite schema（对应 supabase/migrations/0001_schema.sql 的本地等价） ----------
@@ -452,6 +478,7 @@ CREATE TABLE IF NOT EXISTS items (
   id TEXT PRIMARY KEY,
   book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
+  aliases TEXT NOT NULL DEFAULT '[]',
   kind TEXT NOT NULL DEFAULT 'object',
   description TEXT,
   visual_note TEXT,
@@ -479,6 +506,7 @@ CREATE TABLE IF NOT EXISTS clues (
   id TEXT PRIMARY KEY,
   book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
+  aliases TEXT NOT NULL DEFAULT '[]',
   clue_type TEXT NOT NULL DEFAULT 'other',
   description TEXT NOT NULL,
   introduced_chapter_id TEXT REFERENCES source_chapters(id),
@@ -510,8 +538,19 @@ CREATE TABLE IF NOT EXISTS style_bibles (
   proposal_json TEXT NOT NULL DEFAULT '[]',
   approved_proposal_index INTEGER,
   approved_at TEXT,
+  manual_override INTEGER NOT NULL DEFAULT 0,
   created_at TEXT,
   updated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS bible_proposals (
+  id TEXT PRIMARY KEY,
+  book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+  version INTEGER NOT NULL,
+  proposal_json TEXT NOT NULL DEFAULT '[]',
+  approved_index INTEGER,
+  note TEXT,
+  created_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS voice_profiles (
@@ -881,5 +920,25 @@ CREATE INDEX IF NOT EXISTS idx_checkpoints_book ON checkpoints(book_id, created_
   if (!adaptedColumns.includes("basis")) {
     db.exec(`ALTER TABLE adapted_chapters ADD COLUMN basis TEXT NOT NULL DEFAULT 'source'`);
   }
+
+  // clues 增量列：别名（与 locations/items 对齐，支撑跨章去重）
+  const clueColumns = db.prepare(`PRAGMA table_info(clues)`).all().map((r) => (r as { name: string }).name);
+  if (!clueColumns.includes("aliases")) {
+    db.exec(`ALTER TABLE clues ADD COLUMN aliases TEXT NOT NULL DEFAULT '[]'`);
+  }
+
+  // items 增量列：别名（支撑跨章去重）
+  const itemColumns = db.prepare(`PRAGMA table_info(items)`).all().map((r) => (r as { name: string }).name);
+  if (!itemColumns.includes("aliases")) {
+    db.exec(`ALTER TABLE items ADD COLUMN aliases TEXT NOT NULL DEFAULT '[]'`);
+  }
+
+  // 风格圣经 v2（docs/14）：工作台手改标记 manual_override
+  const styleColumns = db.prepare(`PRAGMA table_info(style_bibles)`).all().map((r) => (r as { name: string }).name);
+  if (!styleColumns.includes("manual_override")) {
+    db.exec(`ALTER TABLE style_bibles ADD COLUMN manual_override INTEGER NOT NULL DEFAULT 0`);
+  }
+  // 批次归档表（历史候选，append-only；docs/14 §2.2）
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_bible_proposals_book ON bible_proposals(book_id, version)`);
 }
 

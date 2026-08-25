@@ -36,6 +36,7 @@ export const chunkAnalysisSchema = z.object({
     .array(
       z.object({
         name: z.string(),
+        aliases: z.array(z.string()).default([]),
         kind: z.string().default("object"),
         description: z.string().default(""),
         visual_note: z.string().default(""),
@@ -46,6 +47,7 @@ export const chunkAnalysisSchema = z.object({
     .array(
       z.object({
         name: z.string(),
+        aliases: z.array(z.string()).default([]),
         clue_type: z.string().default("other"),
         description: z.string(),
         is_red_herring: z.boolean().default(false),
@@ -73,6 +75,8 @@ export const styleBibleProposalSchema = z.object({
   narration_tone: z.string().default(""),
   spoiler_rules: z.array(z.string()).default([]),
   negative_prompt: z.string().default(""),
+  /** 为什么推荐这套（适配理由：类型契合/气氛/可绘图性） */
+  rationale: z.string().default(""),
 });
 
 export const styleBibleProposalsSchema = z.object({

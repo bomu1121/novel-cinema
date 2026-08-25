@@ -26,7 +26,9 @@ interface StagedGroup {
 }
 
 const NODE_LABEL: Record<string, string> = {
-  analyze: "分析 + 风格候选",
+  analyze: "章节分析",
+  "bible.propose": "风格候选",
+  condense: "精简底稿",
   adapt: "改编脚本",
   "assets-phase1": "设定图 + 背景",
   "assets-phase2": "表情变体",

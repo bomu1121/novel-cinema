@@ -18,6 +18,8 @@
 - [docs/09-ui-primary-action-audit.md](docs/09-ui-primary-action-audit.md) — **每视图主操作审计**（一屏一主 CTA 的走查记录）
 - [docs/10-upload-clean-backlog.md](docs/10-upload-clean-backlog.md) — **上传/清洗环节调研后暂缓待办**（编码置信度 / 流式上传 / 规则外置等）
 - [docs/11-condense-v0.md](docs/11-condense-v0.md) — **视频向章节精简 v0**（提示词研究 / 数据模型 / 对照页 / 手动修正）
+- [docs/13-character-dedup.md](docs/13-character-dedup.md) — **人物/地点/物品/线索去重调研与修复**（四向匹配 / 档案注入提示词 / 存量一键合并）
+- [docs/14-style-bible-v2.md](docs/14-style-bible-v2.md) — **风格圣经 v2**（独立 bible.propose 节点 / 全书聚合生成 / 批次归档与恢复 / 手工修订标记）
 
 ## 技术栈（本地单机版）
 
@@ -49,6 +51,9 @@ npm run build
 
 # 一键载入《魔眼之匣》测试章（固定 bookId=fixture-book，幂等重建）
 npm run seed:magyan
+
+# 实体去重修复：合并存量重复的人物/地点/物品/线索（-- <bookId> 指定书；--dry-run 预览；--type 限定类型）
+npm run heal:entities
 
 # 一键流水线（单章）
 npm run pipeline:local -- --book <bookId> --approve-all

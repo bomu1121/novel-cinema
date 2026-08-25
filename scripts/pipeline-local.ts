@@ -11,7 +11,7 @@ import {
   approveStyleBible,
   persistChapterAnalysis,
   persistStyleProposals,
-  proposeStyleBibles,
+  proposeStyleBiblesForBook,
 } from "../src/lib/pipeline/nodes/analyze";
 import { approveAdaptedChapter, runAdaptation } from "../src/lib/pipeline/nodes/adapt";
 import { generateAssetPhase } from "../src/lib/pipeline/nodes/assets";
@@ -48,8 +48,8 @@ async function main() {
   const bookId = args.bookId!;
   const supabase = getSupabaseAdmin();
 
-  // 1. 单章分析
-  step("B22/B24 单章分析 + 风格圣经候选");
+  // 1. 单章分析（不再联动风格候选；docs/14）
+  step("B22 单章分析");
   const { data: chapter } = await supabase
     .from("source_chapters")
     .select("id, idx, title, cleaned_text")
@@ -66,13 +66,19 @@ async function main() {
   };
   const analysis = await analyzeChapter(bookId, chapterForAnalysis);
   await persistChapterAnalysis(bookId, chapterForAnalysis, analysis);
-  const proposals = await proposeStyleBibles(bookId, analysis, null);
-  const styleBibleId = await persistStyleProposals(bookId, proposals);
-  console.log(`风格圣经候选：${proposals.proposals.length} 套（推荐 #${proposals.recommended_index + 1}）`);
+  console.log(`章节摘要：${analysis.summary.slice(0, 60)}…`);
+
+  // 1.5 风格圣经候选（书级，全书聚合）
+  step("B24 风格圣经候选（全书聚合）");
+  const proposals = await proposeStyleBiblesForBook(bookId);
+  const styleResult = await persistStyleProposals(bookId, proposals);
+  console.log(
+    `风格圣经候选：${proposals.proposals.length} 套（推荐 #${proposals.recommended_index + 1}）· v${styleResult.version}${styleResult.archived ? "（旧批次已归档）" : ""}`,
+  );
 
   // 签核 A
   if (args.approveAll) {
-    await approveStyleBible(bookId, styleBibleId, proposals.recommended_index);
+    await approveStyleBible(bookId, styleResult.id, proposals.recommended_index);
     console.log("签核 A：已批准推荐风格方案");
   } else {
     console.log(`待签核 A：/books/${bookId}/bible 选择一套风格方案`);

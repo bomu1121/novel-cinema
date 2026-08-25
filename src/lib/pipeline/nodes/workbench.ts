@@ -6,7 +6,7 @@ import { estimateNode } from "@/lib/pipeline/graph";
 import { persistReviewTasks, handleAdaptationFailure } from "@/lib/review";
 import { AdaptationValidationError, runAdaptation } from "@/lib/pipeline/nodes/adapt";
 import { resolveAssetUrl } from "@/lib/pipeline/nodes/assets";
-import { analyzeChapter, persistChapterAnalysis, persistStyleProposals, proposeStyleBibles } from "@/lib/pipeline/nodes/analyze";
+import { analyzeChapter, persistChapterAnalysis, persistStyleProposals, proposeStyleBiblesForBook } from "@/lib/pipeline/nodes/analyze";
 import { runCondensation } from "@/lib/pipeline/nodes/condense";
 import { generateAssetPhase } from "@/lib/pipeline/nodes/assets";
 import { buildStoryboard } from "@/lib/pipeline/nodes/storyboard";
@@ -38,7 +38,7 @@ export async function getWorkbench(bookId: string) {
       s.from("characters").select("id, canonical_name, aliases, role, description, bio, ref_asset_id, voice_profile_id, status").eq("book_id", bookId),
       s.from("clues").select("id, name, clue_type, description, is_red_herring, is_spoiler, status").eq("book_id", bookId),
       s.from("locations").select("id, name, visual_note, ref_asset_id, status").eq("book_id", bookId),
-      s.from("style_bibles").select("id, version, status, visual_style, art_direction, narration_tone, camera_grammar, spoiler_rules, negative_prompt, proposal_json").eq("book_id", bookId).order("version", { ascending: false }).limit(1).maybeSingle(),
+      s.from("style_bibles").select("id, version, status, visual_style, art_direction, narration_tone, camera_grammar, spoiler_rules, negative_prompt, proposal_json, manual_override").eq("book_id", bookId).order("version", { ascending: false }).limit(1).maybeSingle(),
       s.from("adapted_chapters").select("id, source_chapter_id, title, hook, status, target_duration_sec, estimated_duration_sec, selection_report").eq("book_id", bookId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
       s.from("assets").select("id, kind, title, prompt, character_id, expression, scene_key, status, file_key, params").eq("book_id", bookId).order("created_at", { ascending: false }),
       s.from("voice_profiles").select("id, name, role, character_id, provider_voice_id, defaults, status").eq("book_id", bookId),
@@ -96,7 +96,7 @@ export async function getWorkbench(bookId: string) {
     ),
   );
 
-  const estimateNodes: RerunNode[] = ["analyze", "condense", "adapt", "assets-phase1", "assets-phase2", "storyboard", "voice"];
+  const estimateNodes: RerunNode[] = ["analyze", "bible.propose", "condense", "adapt", "assets-phase1", "assets-phase2", "storyboard", "voice"];
   const [estimates, nodeBlockers] = await Promise.all([
     Promise.all(
       estimateNodes.map(async (n) => [n, await estimateRerun(bookId, n).catch(() => "暂无法估算")]),
@@ -156,6 +156,11 @@ export async function patchWorkbenchRow(
     ]);
   }
 
+  // 风格圣经手改显式化（docs/14 §6）：普通字段编辑自动打 manual_override 标记（JSON 显式传值则尊重）
+  if (table === "style_bibles" && patch.manual_override === undefined) {
+    patch = { ...patch, manual_override: 1 };
+  }
+
   const { error } = await s.from(table).update(patch).eq("id", id);
   if (error) {
     if (snapshotId) {
@@ -213,7 +218,10 @@ export async function estimateRerun(bookId: string, node: RerunNode): Promise<st
     case "analyze": {
       const { data: ch } = await s.from("source_chapters").select("char_count").eq("book_id", bookId).eq("idx", 1).single();
       const chars = ch?.char_count ?? 0;
-      return `分析 1 章（${chars} 字）· 约 2 次 LLM 调用 · 30~60s · 生成 3 套风格候选`;
+      return `分析 1 章（${chars} 字）· 约 2 次 LLM 调用 · 30~60s（不再刷新风格候选）`;
+    }
+    case "bible.propose": {
+      return `生成 3 套风格候选（全书聚合）· 1 次 LLM 调用 · 20~60s · 旧批次自动归档，可回看/恢复`;
     }
     case "condense": {
       const { data: ch } = await s.from("source_chapters").select("char_count").eq("book_id", bookId).eq("idx", 1).single();
@@ -304,6 +312,7 @@ async function propagateStale(bookId: string, table: string, id: string): Promis
 
 export type RerunNode =
   | "analyze"
+  | "bible.propose"
   | "condense"
   | "adapt"
   | "assets-phase1"
@@ -322,13 +331,13 @@ export async function rerunNode(
   const r = reporter ?? NOOP_REPORTER;
   switch (node) {
     case "analyze": {
-      r.step("读取章节", 1, 3);
+      r.step("读取章节", 1, 2);
       let analyzeQuery = s.from("source_chapters").select("id, idx, title, cleaned_text").eq("book_id", bookId);
       analyzeQuery = input.chapterId ? analyzeQuery.eq("id", input.chapterId) : analyzeQuery.eq("idx", 1);
       const { data: chapter } = await analyzeQuery.single();
       if (!chapter) throw new Error("没有 idx=1 的章节");
       if (r.checkCancelled()) throw new JobCancelledError();
-      r.step("AI 分析全文", 2, 3);
+      r.step("AI 分析全文", 2, 2);
       const analysis = await analyzeChapter(bookId, {
         id: chapter.id,
         idx: chapter.idx,
@@ -336,10 +345,15 @@ export async function rerunNode(
         cleanedText: chapter.cleaned_text,
       });
       await persistChapterAnalysis(bookId, chapter, analysis);
-      r.step("生成风格候选", 3, 3);
-      const proposals = await proposeStyleBibles(bookId, analysis, null);
-      const styleBibleId = await persistStyleProposals(bookId, proposals);
-      return { styleBibleId, recommendedIndex: proposals.recommended_index };
+      return { summary: analysis.summary, tone: analysis.tone };
+    }
+    case "bible.propose": {
+      r.step("聚合全书档案", 1, 2);
+      if (r.checkCancelled()) throw new JobCancelledError();
+      r.step("AI 生成风格候选", 2, 2);
+      const proposals = await proposeStyleBiblesForBook(bookId);
+      const result = await persistStyleProposals(bookId, proposals);
+      return { styleBibleId: result.id, version: result.version, recommendedIndex: proposals.recommended_index };
     }
     case "condense": {
       r.step("读取章节", 1, 2);

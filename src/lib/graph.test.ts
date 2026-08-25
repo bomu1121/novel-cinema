@@ -71,11 +71,12 @@ describe("下游影响计数（docs/06 §4.2 stale 溯源）", () => {
 });
 
 describe("estimateNode 三档 gate（docs/07 I3）", () => {
-  it("adapt/storyboard → block；analyze/assets/voice → notify；render → auto", async () => {
+  it("adapt/storyboard → block；analyze/bible.propose/assets/voice → notify；render → auto", async () => {
     const bookId = `gate-${randomUUID()}`;
     const adapt = await estimateNode(bookId, "adapt");
     const storyboard = await estimateNode(bookId, "storyboard");
     const analyze = await estimateNode(bookId, "analyze");
+    const bible = await estimateNode(bookId, "bible.propose");
     const assets = await estimateNode(bookId, "assets-phase1");
     const voice = await estimateNode(bookId, "voice");
     const render = await estimateNode(bookId, "render");
@@ -83,6 +84,8 @@ describe("estimateNode 三档 gate（docs/07 I3）", () => {
     expect(adapt.gate).toBe("block");
     expect(storyboard.gate).toBe("block");
     expect(analyze.gate).toBe("notify");
+    expect(bible.gate).toBe("notify");
+    expect(bible.llmCalls).toBe(1);
     expect(assets.gate).toBe("notify");
     expect(voice.gate).toBe("notify");
     expect(render.gate).toBe("auto");
