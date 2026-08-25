@@ -133,6 +133,58 @@ export function applyDurationCap(input: AdaptContextInput, adapt: AdaptedChapter
   return true;
 }
 
+/** 按长度硬切（优先在标点处断句），用于拆分超长旁白 */
+function splitByLength(text: string, maxCleanLen: number): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let clean = 0;
+  for (const ch of text) {
+    current += ch;
+    if (!/[\s\u3000]/.test(ch)) clean++;
+    if (clean >= maxCleanLen) {
+      parts.push(current);
+      current = "";
+      clean = 0;
+    }
+  }
+  if (current.trim()) parts.push(current);
+  return parts;
+}
+
+/**
+ * 确定性拆分超长旁白（>50 字，超过 10 秒朗读上限）为多条 narration beat；
+ * 共用 source_span、标记 low_confidence、重排 idx、重算时长。返回拆分条数。
+ * （真实数据验证：模型在"总时长超限 + 旁白超长"混合错误下反复重试失败，
+ *  这类错误全部可确定性修复，不应浪费 LLM 重试。）
+ */
+export function splitLongNarrations(input: AdaptContextInput, adapt: AdaptedChapter): number {
+  let split = 0;
+  const next: Beat[] = [];
+  for (const b of adapt.beats) {
+    const clean = b.text.replace(/\s/g, "");
+    if (b.type === "narration" && clean.length > 50) {
+      const parts = splitByLength(b.text, 50);
+      for (const part of parts) {
+        const text = part.trim();
+        next.push({
+          ...b,
+          text,
+          estimated_duration_sec: estimateBeatDuration({ ...b, text }),
+          flags: { ...(b.flags ?? {}), low_confidence: true },
+        });
+      }
+      split += parts.length - 1;
+    } else {
+      next.push(b);
+    }
+  }
+  next.forEach((b, i) => {
+    b.idx = i;
+  });
+  adapt.beats = next;
+  return split;
+}
+
 interface StyleBibleForAdapt {
   visual_style: string;
   narration_tone: string;
@@ -370,26 +422,23 @@ export async function runAdaptation(
       break;
     }
     // 确定性兜底优先于随机重试（真实数据验证：模型反复超预算、重试压力下 span 定位劣化）
-    // ① 仅超时长 → 按比例压缩
-    if (isOnlyDurationError(errors)) {
-      applyDurationCap(input, result.data);
-      adapt = result.data;
-      r.log("总时长超预算，已按比例压缩到预算内");
-      break;
-    }
-    // ② 仅 span/时长类错误 → 模糊定位修复，不再让模型重试
-    if (errors.every((e) => e.includes("source_span") || e.startsWith("总时长"))) {
-      const repaired = repairSourceSpans(input, result.data);
+    // 可确定性修复的错误集合：source_span 定位 / 总时长超限 / 旁白超长（不含说话人白名单等语义错误）
+    const deterministicallyFixable = errors.every(
+      (e) => e.includes("source_span") || e.startsWith("总时长") || e.includes("旁白超过 10 秒朗读上限"),
+    );
+    if (deterministicallyFixable) {
+      const spanRepaired = repairSourceSpans(input, result.data);
+      const split = splitLongNarrations(input, result.data);
+      const capped = applyDurationCap(input, result.data);
       const after = validateAdaptation(input, result.data);
       if (after.length === 0) {
         adapt = result.data;
-        if (repaired > 0) r.log(`已自动修正 ${repaired} 处 source_span 定位（确定性修复）`);
-        break;
-      }
-      if (isOnlyDurationError(after)) {
-        applyDurationCap(input, result.data);
-        adapt = result.data;
-        r.log(`已自动修正 ${repaired} 处 source_span 并压缩时长`);
+        const fixes = [
+          split > 0 ? `旁白拆分 ${split} 条` : null,
+          spanRepaired > 0 ? `span 修正 ${spanRepaired} 处` : null,
+          capped ? "时长压缩" : null,
+        ].filter(Boolean);
+        r.log(`已确定性修复：${fixes.join("、")}`);
         break;
       }
       lastErrors = after;

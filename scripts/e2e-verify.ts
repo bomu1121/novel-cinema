@@ -43,12 +43,30 @@ async function waitJob(bookId: string, jobId: string, timeoutMs: number) {
   for (;;) {
     const { json } = await get(`/api/books/${bookId}/jobs/${jobId}`);
     const job = json.job;
-    if (job && job.status !== "pending" && job.status !== "running") {
+    if (json.error || !job) {
+      // 入队被拒（409）/ job 不存在：立即失败，不再空轮询到超时
+      return { status: "missing", error: json.error ?? "job 不存在（可能入队被前置条件拒绝）", elapsedMs: Date.now() - t0, events: [] };
+    }
+    if (job.status !== "pending" && job.status !== "running") {
       return { ...job, elapsedMs: Date.now() - t0, events: json.events ?? [] };
     }
     if (Date.now() - t0 > timeoutMs) return { status: "timeout", elapsedMs: Date.now() - t0, events: [] };
     await new Promise((r) => setTimeout(r, 1500));
   }
+}
+
+/** 入队后立即检查 409（前置条件未满足），失败则打印 blockers */
+async function enqueueOrFail(bookId: string, node: string, label: string) {
+  const res = await post(`/api/books/${bookId}/jobs`, { node });
+  if (res.status === 409) {
+    check(`${label} 入队`, false, res.json.error ?? JSON.stringify(res.json.blockers ?? []));
+    return null;
+  }
+  if (res.status !== 200) {
+    check(`${label} 入队`, false, `HTTP ${res.status} ${res.json.error ?? ""}`);
+    return null;
+  }
+  return res.json.jobId as string;
 }
 
 async function main() {
@@ -70,8 +88,9 @@ async function main() {
   // 2. analyze（章节分析；不再生成风格候选，docs/14）
   console.log("\n── 节点 1/6：analyze（2 次 LLM）──");
   const estAnalyze = (await get(`/api/books/${bookId}/estimate?node=analyze`)).json;
-  const a = await post(`/api/books/${bookId}/jobs`, { node: "analyze" });
-  const aj = await waitJob(bookId, a.json.jobId, 240_000);
+  const aJobId = await enqueueOrFail(bookId, "analyze", "analyze");
+  if (!aJobId) return;
+  const aj = await waitJob(bookId, aJobId, 240_000);
   check("analyze 完成", aj.status === "succeeded", `实际耗时 ${(aj.elapsedMs / 1000).toFixed(0)}s（预报 ${estAnalyze.estSeconds?.[0]}~${estAnalyze.estSeconds?.[1]}s）`);
   const { data: characters } = await s.from("characters").select("id").eq("book_id", bookId);
   const { data: clues } = await s.from("clues").select("id").eq("book_id", bookId);
@@ -81,8 +100,9 @@ async function main() {
   // 2.5 bible.propose（书级风格候选，全书聚合）
   console.log("\n── 节点 1.5/6：bible.propose（风格候选，1 次 LLM）──");
   const estBible = (await get(`/api/books/${bookId}/estimate?node=bible.propose`)).json;
-  const bp = await post(`/api/books/${bookId}/jobs`, { node: "bible.propose" });
-  const bpj = await waitJob(bookId, bp.json.jobId, 240_000);
+  const bpJobId = await enqueueOrFail(bookId, "bible.propose", "bible.propose");
+  if (!bpJobId) return;
+  const bpj = await waitJob(bookId, bpJobId, 240_000);
   check("bible.propose 完成", bpj.status === "succeeded", `实际耗时 ${(bpj.elapsedMs / 1000).toFixed(0)}s（预报 ${estBible.estSeconds?.[0]}~${estBible.estSeconds?.[1]}s）`);
   const { data: styleBibles } = await s.from("style_bibles").select("id, proposal_json, status").eq("book_id", bookId);
   check("风格候选生成", (styleBibles?.length ?? 0) > 0 && (styleBibles?.[0]?.proposal_json?.length ?? 0) >= 1,
@@ -98,16 +118,26 @@ async function main() {
   // 3. adapt（staged）
   console.log("\n── 节点 2/6：adapt（staged 审阅）──");
   const estAdapt = (await get(`/api/books/${bookId}/estimate?node=adapt`)).json;
-  const ad = await post(`/api/books/${bookId}/jobs`, { node: "adapt" });
-  const adj = await waitJob(bookId, ad.json.jobId, 600_000);
+  const adJobId = await enqueueOrFail(bookId, "adapt", "adapt");
+  if (!adJobId) return;
+  const adj = await waitJob(bookId, adJobId, 600_000);
   check("adapt 完成（变更清单已生成）", adj.status === "succeeded", `实际耗时 ${(adj.elapsedMs / 1000).toFixed(0)}s（预报 ${estAdapt.estSeconds?.[0]}~${estAdapt.estSeconds?.[1]}s）`);
-  const staged = (await get(`/api/books/${bookId}/staged?jobId=${ad.json.jobId}`)).json;
+  if (adj.status !== "succeeded") {
+    console.log(`  · 失败原因：${adj.error ?? "未知"}（收件箱详情见下）`);
+    const { data: openTasks } = await s.from("review_tasks").select("kind, status, ai_report").eq("book_id", bookId).eq("status", "open");
+    for (const t of openTasks ?? []) {
+      const report = (t as { ai_report?: unknown }).ai_report;
+      const issue = (report as { issue?: string } | null)?.issue ?? JSON.stringify(report);
+      console.log(`  · [待审] ${(t as { kind?: string }).kind}: ${String(issue).slice(0, 300)}`);
+    }
+  }
+  const staged = (await get(`/api/books/${bookId}/staged?jobId=${adJobId}`)).json;
   const stagedEntries = staged.entries ?? [];
   check("staged 变更清单生成", stagedEntries.length > 0, `${stagedEntries.length} 条（beats 新增 ${stagedEntries.filter((e: any) => e.tableName === "beats" && e.op === "insert").length} / 章节 ${stagedEntries.filter((e: any) => e.tableName === "adapted_chapters").length}）`);
   // 应用：接受 beats 新增，接受章节行
   const decisions: Record<string, "accepted"> = {};
   for (const e of stagedEntries) decisions[e.id] = "accepted";
-  const ap = await post(`/api/books/${bookId}/staged/${ad.json.jobId}`, { decisions });
+  const ap = await post(`/api/books/${bookId}/staged/${adJobId}`, { decisions });
   check("审阅应用", ap.status === 200 && ap.json.ok, `应用 ${ap.json.applied} 处`);
   const { data: beats } = await s.from("beats").select("id, idx, text").eq("book_id", bookId);
   check("beats 落库", (beats?.length ?? 0) > 0, `${beats?.length ?? 0} 个 beat`);
@@ -166,15 +196,16 @@ async function main() {
   // 6. storyboard（staged）
   console.log("\n── 节点 3/6：storyboard（staged 审阅）──");
   const estSb = (await get(`/api/books/${bookId}/estimate?node=storyboard`)).json;
-  const sb = await post(`/api/books/${bookId}/jobs`, { node: "storyboard" });
-  const sbj = await waitJob(bookId, sb.json.jobId, 120_000);
+  const sbJobId = await enqueueOrFail(bookId, "storyboard", "storyboard");
+  if (!sbJobId) return;
+  const sbj = await waitJob(bookId, sbJobId, 120_000);
   check("storyboard 完成", sbj.status === "succeeded", `实际耗时 ${(sbj.elapsedMs / 1000).toFixed(0)}s（预报 ${estSb.estSeconds?.[0]}~${estSb.estSeconds?.[1]}s）`);
-  const sbStaged = (await get(`/api/books/${bookId}/staged?jobId=${sb.json.jobId}`)).json;
+  const sbStaged = (await get(`/api/books/${bookId}/staged?jobId=${sbJobId}`)).json;
   const sbEntries = sbStaged.entries ?? [];
   check("分镜变更清单", sbEntries.length > 0, `${sbEntries.length} 条（镜头 ${sbEntries.filter((e: any) => e.tableName === "shots").length} / 图层 ${sbEntries.filter((e: any) => e.tableName === "shot_layers").length} / 时间线 ${sbEntries.filter((e: any) => e.tableName === "timelines").length}）`);
   const sbDecisions: Record<string, "accepted"> = {};
   for (const e of sbEntries) sbDecisions[e.id] = "accepted";
-  const sbAp = await post(`/api/books/${bookId}/staged/${sb.json.jobId}`, { decisions: sbDecisions });
+  const sbAp = await post(`/api/books/${bookId}/staged/${sbJobId}`, { decisions: sbDecisions });
   check("分镜审阅应用", sbAp.status === 200 && sbAp.json.ok, `应用 ${sbAp.json.applied} 处`);
   const { data: shots } = await s.from("shots").select("id, idx, duration_sec").eq("book_id", bookId);
   // shot_layers 表无 book_id 列（schema 如此），验证库隔离所以全库计数即可
@@ -190,11 +221,15 @@ async function main() {
   // 8. voice（真实 TTS + ASR）
   console.log("\n── 节点 4/6：voice（逐句 TTS + ASR）──");
   const estV = (await get(`/api/books/${bookId}/estimate?node=voice`)).json;
-  const v = await post(`/api/books/${bookId}/jobs`, { node: "voice" });
-  const vj = await waitJob(bookId, v.json.jobId, 300_000);
-  check("voice 完成", vj.status === "succeeded", `实际耗时 ${(vj.elapsedMs / 1000).toFixed(0)}s（预报 ${estV.estSeconds?.[0]}~${estV.estSeconds?.[1]}s） · 失败信息: ${vj.error ?? "无"}`);
-  const { data: takes } = await s.from("voice_takes").select("id, beat_id, status, asr_confidence").eq("book_id", bookId);
-  check("voice_takes 落库", (takes?.length ?? 0) > 0, `${takes?.length ?? 0} 句（accepted ${takes?.filter((t: any) => t.status === "accepted").length ?? 0} / draft ${takes?.filter((t: any) => t.status === "draft").length ?? 0}）`);
+  const vJobId = await enqueueOrFail(bookId, "voice", "voice");
+  if (!vJobId) {
+    console.log("  · voice 被前置条件拦截（上游未就绪），跳过 voice_takes 校验");
+  } else {
+    const vj = await waitJob(bookId, vJobId, 300_000);
+    check("voice 完成", vj.status === "succeeded", `实际耗时 ${(vj.elapsedMs / 1000).toFixed(0)}s（预报 ${estV.estSeconds?.[0]}~${estV.estSeconds?.[1]}s） · 失败信息: ${vj.error ?? "无"}`);
+    const { data: takes } = await s.from("voice_takes").select("id, beat_id, status, asr_confidence").eq("book_id", bookId);
+    check("voice_takes 落库", (takes?.length ?? 0) > 0, `${takes?.length ?? 0} 句（accepted ${takes?.filter((t: any) => t.status === "accepted").length ?? 0} / draft ${takes?.filter((t: any) => t.status === "draft").length ?? 0}）`);
+  }
 
   // 9. cost 一致性
   console.log("\n── 成本仪表盘一致性 ──");
