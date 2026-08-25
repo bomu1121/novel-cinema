@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
@@ -48,6 +48,28 @@ interface WorkbenchData {
   nodeBlockers?: Record<string, string[]>;
 }
 
+interface RerunJobInfo {
+  key: string;
+  node: string;
+  jobId: string;
+  chapterId?: string | null;
+}
+
+const RERUN_NODE_LABEL: Record<string, string> = {
+  analyze: "① 分析+风格候选",
+  adapt: "② 改编脚本",
+  "assets-phase1": "③a 设定图+背景",
+  "assets-phase2": "③b 表情变体",
+  storyboard: "④ 分镜",
+  voice: "⑤ 配音",
+};
+
+const CHAPTER_SCOPED_NODES = new Set(["analyze", "condense", "adapt"]);
+
+function rerunKey(node: string, chapterId?: string | null): string {
+  return CHAPTER_SCOPED_NODES.has(node) && chapterId ? `${node}:${chapterId}` : node;
+}
+
 export default function WorkbenchPage() {
   const params = useParams<{ bookId: string }>();
   const bookId = params.bookId;
@@ -58,13 +80,10 @@ export default function WorkbenchPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<{ node: string; label: string } | null>(null);
-  const [rerunJobId, setRerunJobId] = useState<string | null>(null);
+  // 多任务并行：key = node（书级）或 node:chapterId（章节级），每个任务独立 jobId/进度/审阅
+  const [rerunJobs, setRerunJobs] = useState<Record<string, RerunJobInfo>>({});
   const [edits, setEdits] = useState<Record<string, Record<string, unknown>>>({});
   const toast = useToast();
-  const rerunJob = useJob(bookId, rerunJobId);
-  // 记录最近一次重跑的节点（staging 节点完成后进入审阅而非直接刷新）
-  const [rerunNodeName, setRerunNodeName] = useState<string | null>(null);
-  const isStagedNode = rerunNodeName === "adapt" || rerunNodeName === "storyboard";
   const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   /** per-node 自主性预设（docs/07 I2 / P4-D）：direct 直接入队、notify 入队后通知、review 先预演 */
@@ -134,28 +153,54 @@ export default function WorkbenchPage() {
     return () => window.removeEventListener("novel-cinema:data-changed", handler);
   }, [load]);
 
-  // 重跑任务收尾：staging 节点完成后进入审阅（保留 jobId）；其余刷新编排台
-  useEffect(() => {
-    if (rerunJob.status === "succeeded") {
-      if (isStagedNode) {
-        toast.push("info", "变更清单已生成，进入逐条审阅（应用前不覆盖任何数据）", undefined);
-        // 以下 setState 由 useJob 外部状态变化驱动，属订阅回调语义
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setConfirming(null);
-        return;
+  const removeRerunJob = useCallback((key: string) => {
+    setRerunJobs((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, []);
+
+  const handleRerunSettled = useCallback(
+    (key: string, node: string, status: string, message: string | null) => {
+      const isStaged = node === "adapt" || node === "storyboard";
+      if (status === "succeeded") {
+        if (!isStaged) {
+          removeRerunJob(key);
+          toast.push("success", "重跑完成，已刷新编排台", undefined);
+          void load();
+        }
+        // staging 节点保留在 rerunJobs 中，由 StagedReviewPanel 审阅后移除
+      } else {
+        removeRerunJob(key);
+        toast.push(
+          status === "failed" ? "error" : "info",
+          message ?? (status === "failed" ? "任务失败" : "任务已取消"),
+          undefined,
+        );
+        void load();
       }
-      toast.push("success", "重跑完成，已刷新编排台", undefined);
-      setConfirming(null);
-      setRerunJobId(null);
+    },
+    [removeRerunJob, toast, load],
+  );
+
+  const handleStagedApplied = useCallback(
+    (key: string, result: { applied: number; rejected: number }) => {
+      toast.push("success", `已应用 ${result.applied} 处变更（驳回 ${result.rejected}）`, undefined);
+      removeRerunJob(key);
       void load();
-    } else if (rerunJob.status === "failed" || rerunJob.status === "cancelled") {
-      toast.push(rerunJob.status === "failed" ? "error" : "info", rerunJob.error ?? "任务已取消", undefined);
-      setRerunJobId(null);
-      setRerunNodeName(null);
-    }
-    // load/toast 随 bookId 变化而变，不应重触发任务收尾逻辑
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rerunJob.status, rerunJob.error]);
+    },
+    [removeRerunJob, toast, load],
+  );
+
+  const handleStagedDiscarded = useCallback(
+    (key: string) => {
+      toast.push("info", "已放弃本次变更，数据未改动", undefined);
+      removeRerunJob(key);
+      void load();
+    },
+    [removeRerunJob, toast, load],
+  );
 
   function edit(key: string, field: string, value: unknown) {
     setEdits((prev) => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
@@ -219,28 +264,45 @@ export default function WorkbenchPage() {
     }
   }
 
-  const executeRerun = useCallback(async (node: string) => {
-    setError(null);
-    try {
-      const input = ["analyze", "condense", "adapt"].includes(node) && selectedChapterId
-        ? { chapterId: selectedChapterId }
-        : undefined;
-      const res = await fetch(`/api/books/${bookId}/jobs`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ node, input }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        toast.push("error", json.error ?? `入队失败（HTTP ${res.status}）`);
+  const executeRerun = useCallback(
+    async (node: string) => {
+      setError(null);
+      const key = rerunKey(node, selectedChapterId);
+      if (rerunJobs[key]) {
+        toast.push("info", "该任务已在执行或待审阅中，请先完成后再重跑", undefined);
         return;
       }
-      setRerunNodeName(node);
-      setRerunJobId(json.jobId as string);
-    } catch (err) {
-      toast.push("error", err instanceof Error ? err.message : String(err));
-    }
-  }, [bookId, toast, selectedChapterId]);
+      try {
+        const input = CHAPTER_SCOPED_NODES.has(node) && selectedChapterId
+          ? { chapterId: selectedChapterId }
+          : undefined;
+        const res = await fetch(`/api/books/${bookId}/jobs`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ node, input }),
+        });
+        const json = await res.json();
+        if (!res.ok) {
+          toast.push("error", json.error ?? `入队失败（HTTP ${res.status}）`);
+          return;
+        }
+        const jobId = json.jobId as string;
+        setRerunJobs((prev) => ({
+          ...prev,
+          [key]: {
+            key,
+            node,
+            jobId,
+            chapterId: CHAPTER_SCOPED_NODES.has(node) ? selectedChapterId : null,
+          },
+        }));
+        setConfirming(null);
+      } catch (err) {
+        toast.push("error", err instanceof Error ? err.message : String(err));
+      }
+    },
+    [bookId, toast, selectedChapterId, rerunJobs],
+  );
 
   const rerun = useCallback(
     (node: string, label: string) => {
@@ -323,7 +385,7 @@ export default function WorkbenchPage() {
       {/* 重跑按钮 */}
       <SectionCard title="节点重跑（确认后覆盖该节点及下游）">
         <p className="mb-3 text-xs text-text-muted">
-          分析 / 精简 / 改编会作用于左侧“当前章节”选择器中的章节。
+          分析 / 精简 / 改编会作用于左侧“当前章节”选择器中的章节；不同节点、不同章节可并行执行。
         </p>
         <div className="flex flex-wrap gap-2">
           {(
@@ -337,15 +399,22 @@ export default function WorkbenchPage() {
             ] as const
           ).map(([node, label]) => {
             const blockers = data?.nodeBlockers?.[node] ?? [];
+            const key = rerunKey(node, selectedChapterId);
+            const alreadyRunning = Boolean(rerunJobs[key]);
             return (
-              <div key={node} className="flex items-center gap-1">
+              <div key={key} className="flex items-center gap-1">
                 <Button
                   size="sm"
                   variant="secondary"
                   onClick={() => rerun(node, label)}
-                  disabled={busy !== null || blockers.length > 0}
-                  loading={busy === `rerun:${node}`}
-                  title={blockers.length > 0 ? blockers.join("；") : undefined}
+                  disabled={busy !== null || blockers.length > 0 || alreadyRunning}
+                  title={
+                    blockers.length > 0
+                      ? blockers.join("；")
+                      : alreadyRunning
+                        ? "该任务已在执行或待审阅中"
+                        : undefined
+                  }
                 >
                   {label}
                 </Button>
@@ -369,44 +438,33 @@ export default function WorkbenchPage() {
           })}
         </div>
 
-          {confirming && (
-            <div className="mt-3">
-              <PlanSheet
+        {Object.values(rerunJobs).length > 0 && (
+          <div className="mt-4 space-y-3">
+            <h3 className="text-sm font-semibold">并行任务</h3>
+            {Object.values(rerunJobs).map((job) => (
+              <RerunJobCard
+                key={job.key}
                 bookId={bookId}
-                node={confirming.node as GraphNode}
-                busy={rerunJob.status === "running" || rerunJob.status === "pending"}
-                onExecute={() => executeRerun(confirming.node)}
-                onCancel={() => setConfirming(null)}
+                job={job}
+                onSettled={handleRerunSettled}
+                onStagedApplied={handleStagedApplied}
+                onStagedDiscarded={handleStagedDiscarded}
               />
-              {rerunJobId && (
-                <JobStepList
-                  className="mt-2"
-                  state={rerunJob}
-                  onCancel={() => void rerunJob.cancel()}
-                />
-              )}
-            </div>
-          )}
-          {isStagedNode && rerunJobId && rerunJob.status === "succeeded" && (
-            <StagedReviewPanel
+            ))}
+          </div>
+        )}
+
+        {confirming && (
+          <div className="mt-3">
+            <PlanSheet
               bookId={bookId}
-              jobId={rerunJobId}
-              nodeLabel={`「${rerunNodeName}」变更审阅`}
-              className="mt-3"
-              onApplied={(result) => {
-                toast.push("success", `已应用 ${result.applied} 处变更（驳回 ${result.rejected}）`, undefined);
-                setRerunJobId(null);
-                setRerunNodeName(null);
-                void load();
-              }}
-              onDiscarded={() => {
-                toast.push("info", "已放弃本次变更，数据未改动", undefined);
-                setRerunJobId(null);
-                setRerunNodeName(null);
-                void load();
-              }}
+              node={confirming.node as GraphNode}
+              busy={Boolean(rerunJobs[rerunKey(confirming.node, selectedChapterId)])}
+              onExecute={() => executeRerun(confirming.node)}
+              onCancel={() => setConfirming(null)}
             />
-          )}
+          </div>
+        )}
 
         <p className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-text-muted">
           章节 {data?.chapters?.length ?? 0} · 人物 {data?.characters?.length ?? 0} · beats{" "}
@@ -735,6 +793,56 @@ function JsonDetails({
         保存 JSON
       </button>
     </details>
+  );
+}
+
+function RerunJobCard({
+  bookId,
+  job,
+  onSettled,
+  onStagedApplied,
+  onStagedDiscarded,
+}: {
+  bookId: string;
+  job: RerunJobInfo;
+  onSettled: (key: string, node: string, status: string, message: string | null) => void;
+  onStagedApplied: (key: string, result: { applied: number; rejected: number }) => void;
+  onStagedDiscarded: (key: string) => void;
+}) {
+  const state = useJob(bookId, job.jobId);
+  const settledRef = useRef(false);
+  const isStaged = job.node === "adapt" || job.node === "storyboard";
+
+  useEffect(() => {
+    if (settledRef.current) return;
+    if (state.status === "succeeded" || state.status === "failed" || state.status === "cancelled") {
+      settledRef.current = true;
+      onSettled(job.key, job.node, state.status, state.error);
+    }
+  }, [state.status, state.error, job.key, job.node, onSettled]);
+
+  const chapterLabel = job.chapterId ? ` · 章节 ${job.chapterId.slice(0, 6)}` : "";
+
+  return (
+    <div className="rounded-lg border border-border bg-surface-2 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2 text-xs">
+        <span className="font-medium text-text">
+          {RERUN_NODE_LABEL[job.node] ?? job.node}
+          {chapterLabel}
+        </span>
+      </div>
+      <JobStepList state={state} onCancel={() => void state.cancel()} />
+      {isStaged && state.status === "succeeded" && (
+        <StagedReviewPanel
+          className="mt-3"
+          bookId={bookId}
+          jobId={job.jobId}
+          nodeLabel={`「${RERUN_NODE_LABEL[job.node] ?? job.node}」变更审阅`}
+          onApplied={(result) => onStagedApplied(job.key, result)}
+          onDiscarded={() => onStagedDiscarded(job.key)}
+        />
+      )}
+    </div>
   );
 }
 

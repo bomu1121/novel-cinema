@@ -75,7 +75,8 @@ export default function StoryboardPage() {
   });
   const [storyboardBlockers, setStoryboardBlockers] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"build" | "approve" | null>(null);
+  const [building, setBuilding] = useState(false);
+  const [approving, setApproving] = useState(false);
   const [durations, setDurations] = useState<Record<string, number>>({});
   const [backgrounds, setBackgrounds] = useState<Record<string, string>>({});
   const [stagedJobId, setStagedJobId] = useState<string | null>(null);
@@ -122,7 +123,7 @@ export default function StoryboardPage() {
   }, [load]);
 
   async function approve() {
-    setBusy("approve");
+    setApproving(true);
     setError(null);
     try {
       const res = await fetch(`/api/books/${bookId}/storyboard/approve`, { method: "POST" });
@@ -135,7 +136,7 @@ export default function StoryboardPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setBusy(null);
+      setApproving(false);
     }
   }
 
@@ -176,15 +177,20 @@ export default function StoryboardPage() {
               bookId={bookId}
               node="storyboard"
               label="构建分镜"
-              disabled={busy !== null || storyboardBlockers.length > 0}
-              onRunningChange={(r) => setBusy(r ? "build" : null)}
+              disabled={approving || storyboardBlockers.length > 0}
+              onRunningChange={setBuilding}
               onDone={(jobId) => {
                 toast.push("info", "分镜已生成，进入逐条审阅（应用前不覆盖任何数据）", undefined);
                 setStagedJobId(jobId);
               }}
             />
             {data.timeline && data.timeline.status !== "approved" && (
-              <Button variant="approve" onClick={approve} disabled={busy !== null} loading={busy === "approve"}>
+              <Button
+                variant="approve"
+                onClick={approve}
+                disabled={approving || building}
+                loading={approving}
+              >
                 批准分镜
               </Button>
             )}
@@ -231,7 +237,7 @@ export default function StoryboardPage() {
         </p>
       )}
 
-      {data.tracks.length === 0 && !busy && (
+      {data.tracks.length === 0 && !building && (
         <EmptyState description="还没有分镜。前置条件：改编脚本 → 资产生成（背景）→ 点“构建分镜”。" />
       )}
 

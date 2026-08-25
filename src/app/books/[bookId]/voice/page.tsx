@@ -42,7 +42,9 @@ export default function VoicePage() {
   const [data, setData] = useState<VoiceData>({ chapter: null, rows: [] });
   const [voiceBlockers, setVoiceBlockers] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"generate" | "approve" | string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [redoIds, setRedoIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     try {
@@ -67,7 +69,7 @@ export default function VoicePage() {
   }, [load]);
 
   async function approve() {
-    setBusy("approve");
+    setApproving(true);
     try {
       const res = await fetch(`/api/books/${bookId}/voice/approve`, { method: "POST" });
       const json = await res.json();
@@ -76,12 +78,12 @@ export default function VoicePage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setBusy(null);
+      setApproving(false);
     }
   }
 
   async function redo(takeId: string) {
-    setBusy(takeId);
+    setRedoIds((prev) => new Set(prev).add(takeId));
     setError(null);
     try {
       const res = await fetch(`/api/books/${bookId}/voice/${takeId}/redo`, { method: "POST" });
@@ -91,7 +93,11 @@ export default function VoicePage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setBusy(null);
+      setRedoIds((prev) => {
+        const next = new Set(prev);
+        next.delete(takeId);
+        return next;
+      });
     }
   }
 
@@ -111,15 +117,15 @@ export default function VoicePage() {
               bookId={bookId}
               node="voice"
               label={`逐句合成（缺 ${missing} 句）`}
-              disabled={busy !== null || voiceBlockers.length > 0}
-              onRunningChange={(r) => setBusy(r ? "generate" : null)}
+              disabled={approving || voiceBlockers.length > 0}
+              onRunningChange={setGenerating}
               onDone={() => void load()}
             />
             <Button
               variant="approve"
               onClick={approve}
-              disabled={busy !== null || red > 0}
-              loading={busy === "approve"}
+              disabled={approving || generating || red > 0}
+              loading={approving}
               title={red > 0 ? "先处理红项" : ""}
             >
               批准全部（红项 {red}）
@@ -194,8 +200,8 @@ export default function VoicePage() {
                   size="sm"
                   variant="secondary"
                   onClick={() => redo(row.take!.id)}
-                  disabled={busy !== null}
-                  loading={busy === row.take.id}
+                  disabled={approving || redoIds.has(row.take.id)}
+                  loading={redoIds.has(row.take.id)}
                 >
                   重录
                 </Button>
