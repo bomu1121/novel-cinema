@@ -79,7 +79,7 @@ export function useJob(bookId: string, jobId: string | null): UseJobState & { ca
   const lastSeqRef = useRef(0);
   const esRef = useRef<EventSource | null>(null);
 
-  // 计时器
+  // 计时器：任务进入终态后停止，避免“已完成”旁边的时间继续跳动
   useEffect(() => {
     if (!jobId) {
       startedAtRef.current = null;
@@ -89,13 +89,16 @@ export function useJob(bookId: string, jobId: string | null): UseJobState & { ca
       return;
     }
     startedAtRef.current ??= Date.now();
+    if (state.status === "succeeded" || state.status === "failed" || state.status === "cancelled") {
+      return;
+    }
     const timer = setInterval(() => {
       if (startedAtRef.current != null) {
         setState((s) => (s.jobId === jobId ? { ...s, elapsedMs: Date.now() - startedAtRef.current! } : s));
       }
     }, 1000);
     return () => clearInterval(timer);
-  }, [jobId]);
+  }, [jobId, state.status]);
 
   const applyEvents = useCallback((events: JobEvent[], terminalStatus?: JobPhase) => {
     setState((prev) => {
